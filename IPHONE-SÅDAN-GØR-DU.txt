@@ -1,0 +1,15 @@
+MIN FILMSAMLING PÅ IPHONE
+
+1. Pak hosting-ZIP-filen ud på din Mac.
+2. Upload hele mappen til en HTTPS-webhost, eksempelvis Netlify Drop.
+3. Åbn den nye webadresse i Safari på din iPhone.
+4. Tryk på Del-knappen.
+5. Vælg "Føj til hjemmeskærm".
+6. Tryk "Tilføj".
+7. Åbn Filmsamling-ikonet på hjemmeskærmen.
+
+KAMERA:
+Tillad kamera, når iPhone spørger. Hvis livekameraet ikke starter, vælg "Tag foto af stregkoden".
+
+GEMNING:
+Film og kladder gemmes automatisk lokalt på iPhone. Eksportér jævnligt en komplet backup under Indstillinger.
