@@ -1,0 +1,23 @@
+name = "min-filmsamling-api"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+[vars]
+ALLOWED_ORIGIN = "https://tobibeepdk.github.io"
+OPENAI_MODEL = "gpt-6.1-sol"
+SESSION_TTL_SECONDS = "900"
+DAILY_LIMIT = "100"
+RATE_LIMIT_PER_MINUTE = "10"
+IP_RATE_LIMIT_PER_MINUTE = "30"
+SESSION_DAILY_LIMIT = "100"
+IP_DAILY_LIMIT = "200"
+LOGIN_RATE_LIMIT_PER_MINUTE = "5"
+LOGIN_DAILY_LIMIT = "50"
+BARCODE_PROVIDER = "upcitemdb"
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "RateLimiter"
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RateLimiter"]
+[observability]
+enabled = false
