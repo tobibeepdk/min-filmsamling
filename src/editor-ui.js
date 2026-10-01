@@ -1,4 +1,5 @@
 import { el, button, field, image } from './ui.js';
+import { icon } from './icons.js';
 const fields = [
   ['Titel', 'title'],
   ['Originaltitel', 'originalTitle'],
@@ -17,6 +18,7 @@ export function renderEditor(draft, actions) {
     'form',
     {
       id: 'film-form',
+      class: 'editor',
       onsubmit: (event) => {
         event.preventDefault();
         actions.save();
@@ -24,17 +26,18 @@ export function renderEditor(draft, actions) {
       oninput: actions.change,
       onchange: actions.change,
     },
+    el('p', { class: 'eyebrow' }, 'FILMOPLYSNINGER'),
     el('h2', {}, draft.editingMovieId ? 'Rediger film' : 'Tilføj film'),
     el('p', { class: 'muted' }, 'Kladden gemmes efter hvert trin, også når du annullerer.'),
     el(
       'div',
-      { class: 'actions' },
-      button('Scan stregkode', actions.scan),
-      button('Find film fra cover', actions.cover, { class: 'primary' }),
+      { class: 'actions capture-actions' },
+      button([icon('barcode'), 'Scan stregkode'], actions.scan),
+      button([icon('camera'), 'Find film fra cover'], actions.cover, { class: 'primary' }),
     ),
     el(
       'div',
-      { class: 'form-grid' },
+      { class: 'form-grid panel' },
       fields.map(([label, name]) =>
         field(label, name, draft[name], {
           multiline: ['plot', 'notes'].includes(name),
@@ -69,13 +72,13 @@ export function renderEditor(draft, actions) {
     ),
     el(
       'div',
-      { class: 'cover-editor' },
+      { class: 'cover-editor panel' },
       image(draft.displayCover, draft.title),
       el(
         'div',
         {},
         el('h3', {}, 'Omslag'),
-        button('Tag eget coverfoto', actions.ownCover),
+        button([icon('camera'), 'Tag eget coverfoto'], actions.ownCover),
         draft.coverId && draft.onlineCover
           ? button('Brug onlineomslaget i stedet', actions.replaceCover)
           : null,

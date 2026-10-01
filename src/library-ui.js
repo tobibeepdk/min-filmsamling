@@ -1,4 +1,5 @@
 import { el, button, image } from './ui.js';
+import { icon } from './icons.js';
 export function renderLibrary(
   movies,
   actions,
@@ -35,7 +36,19 @@ export function renderLibrary(
     el(
       'article',
       { class: 'movie-card' },
-      image(movie.displayCover, movie.title),
+      el(
+        'div',
+        { class: 'poster' },
+        image(movie.displayCover, movie.title),
+        el('span', { class: 'format-badge' }, movie.format || 'DVD'),
+        movie.favorite
+          ? el(
+              'span',
+              { class: 'favorite-badge', role: 'img', 'aria-label': 'Favorit' },
+              icon('star'),
+            )
+          : null,
+      ),
       el(
         'div',
         { class: 'card-body' },
@@ -43,14 +56,7 @@ export function renderLibrary(
         el(
           'p',
           { class: 'muted' },
-          [
-            movie.year,
-            movie.format,
-            movie.favorite ? '★ Favorit' : '',
-            movie.watched ? '✓ Set' : '',
-          ]
-            .filter(Boolean)
-            .join(' · '),
+          [movie.year, movie.watched ? '✓ Set' : ''].filter(Boolean).join(' · '),
         ),
         button('Åbn og rediger', () => actions.edit(movie.id)),
       ),
@@ -58,46 +64,52 @@ export function renderLibrary(
   );
   return el(
     'div',
-    {},
+    { class: 'library' },
     el(
       'section',
       { class: 'hero' },
       el('p', { class: 'eyebrow' }, 'DIN EGEN BIOGRAF'),
-      el('h2', {}, 'Samlingen i lommen'),
-      el(
-        'p',
-        {},
-        'Scan stregkoden eller fotografér forsiden. Appen finder filmen og gemmer den på denne enhed.',
-      ),
+      el('h2', {}, 'Dine film. Din samling.'),
+      el('p', {}, 'Scan stregkoden eller tag et coverfoto. Så finder appen filmen for dig.'),
       el(
         'div',
-        { class: 'actions' },
-        button('Scan stregkode', actions.scan, { class: 'primary' }),
-        button('Find film fra cover', actions.cover),
+        { class: 'actions capture-actions' },
+        button([icon('barcode'), 'Scan stregkode'], actions.scan, { class: 'primary' }),
+        button([icon('camera'), 'Find film fra cover'], actions.cover),
+      ),
+    ),
+    el(
+      'section',
+      { class: 'stats', 'aria-label': 'Samlingen i overblik' },
+      [
+        ['film', movies.length, 'film'],
+        ['set', movies.filter((m) => m.watched).length, 'check'],
+        ['favoritter', movies.filter((m) => m.favorite).length, 'star'],
+      ].map(([label, count, symbol]) =>
+        el('div', { class: 'stat' }, icon(symbol), el('strong', {}, count), el('span', {}, label)),
       ),
     ),
     el(
       'div',
-      { class: 'stats' },
-      el('strong', {}, movies.length + ' film'),
-      el(
-        'span',
-        {},
-        movies.filter((m) => m.watched).length +
-          ' set · ' +
-          movies.filter((m) => m.favorite).length +
-          ' favoritter',
-      ),
+      { class: 'collection-heading' },
+      el('h2', {}, 'Din samling'),
+      el('span', { class: 'muted' }, `${filtered.length} af ${movies.length} film`),
     ),
-    el('div', { class: 'toolbar' }, search, formats),
+    el(
+      'div',
+      { class: 'toolbar' },
+      el('div', { class: 'search-field' }, icon('search'), search),
+      formats,
+    ),
     filtered.length
       ? el('div', { class: 'movie-grid' }, cards)
       : el(
           'section',
           { class: 'empty' },
+          el('div', { class: 'empty-icon' }, icon('film')),
           el('h3', {}, movies.length ? 'Ingen film matcher søgningen' : 'Din samling starter her'),
           el('p', {}, 'Film, egne covers og noter kan åbnes offline.'),
-          button('Tilføj første film', actions.newMovie),
+          movies.length ? null : button([icon('plus'), 'Tilføj første film'], actions.newMovie),
         ),
   );
 }
