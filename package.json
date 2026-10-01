@@ -1,0 +1,38 @@
+{
+  "name": "min-filmsamling",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build && node scripts/build-sw.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "lint": "eslint src shared worker/src scripts tests *.js --no-warn-ignored",
+    "security": "node scripts/security-check.mjs",
+    "worker:dev": "wrangler dev --config worker/wrangler.toml",
+    "worker:deploy": "wrangler deploy --config worker/wrangler.toml",
+    "format": "prettier --write src shared worker/src scripts tests *.js index.html public/service-worker.js public/boot.js"
+  },
+  "dependencies": {
+    "@zxing/browser": "0.1.5",
+    "@zxing/library": "0.21.3",
+    "idb": "8.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "eslint": "10.11.0",
+    "fake-indexeddb": "6.2.5",
+    "globals": "16.5.0",
+    "prettier": "3.9.9",
+    "vite": "7.3.6",
+    "vitest": "3.2.7",
+    "wrangler": "4.145.0"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}
