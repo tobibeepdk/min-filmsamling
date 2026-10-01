@@ -1,5 +1,51 @@
 # Implementering og verifikation – 1. oktober 2026
 
+## Designopdatering
+
+Den afsluttende opsætningsændring forudfylder den udgivne Workers offentlige adresse, hvis ingen adresse er gemt. Brugerens egen Worker-adresse og øvrige indstillinger bevares. `pnpm worker:setup` åbner Wranglers egne skjulte prompts for de tre obligatoriske secrets og tilbyder TMDB-token; scriptet modtager aldrig secretværdier som argumenter eller filer. Fire nye unit-tests og seks browsercases dækker standardadresse, tomme gamle indstillinger og brugerens egen adresse.
+
+Faktisk output efter denne ændring:
+
+```text
+pnpm install --frozen-lockfile: Already up to date; Done in 359ms using pnpm v11.19.0
+pnpm test: Test Files 10 passed (10); Tests 182 passed (182); Duration 1.26s
+pnpm lint: exit 0; ingen lintfejl
+pnpm build: 248 modules transformed; built in 666ms
+Service worker 74f92cab64ddfe88: 10 lokale filer; ingen API-cache.
+pnpm security: 68 filer + 47 git-commits kontrolleret; 0 secret-fund.
+Browser-build: ingen servernøgler eller direkte OpenAI-kald.
+pnpm test:e2e: 38 passed (24.2s)
+git diff --check: exit 0
+bash -n scripts/setup-worker-secrets.sh: exit 0
+Secret-script uden interaktiv terminal: forventet exit 2; kræver skjulte Wrangler-prompts.
+Rekursiv rg-kontrol af dist: 0 fund (rg exit 1)
+```
+
+De første browserforsøg blev stoppet af miljøets server-/browserrettigheder før testene kunne udføres. Den afsluttende almindelige `pnpm test:e2e` ovenfor kørte hele suiten og bestod i WebKit og Chromium. GitHub-connectoren returnerede stadig HTTP 403 efter genforbindelse; branchen blev derefter oprettet og filer publiceret gennem GitHubs webinterface. Pages udgives først efter de fulde GitHub-kontroller og merge.
+
+Workerens `wrangler secret list` returnerede `[]`: produktionssecrets er endnu ikke indtastet. Health og CORS er livekontrolleret som beskrevet nedenfor, men login, cover-AI og TMDB kræver brugerens egne secrets. De må kun indtastes i Wranglers interaktive prompts.
+
+På `codex/iphone-design-refresh` er samling, filmredigering og indstillinger opdateret med et mørkt biografudtryk og varm gylden accent. Scan- og coverknapper står ved siden af hinanden på iPhone; formatmærker og favoritikoner vises på filmkortene. Tre tællere viser samlingens film, set og favoritter. Bundmenuen har lokale dekorative SVG-ikoner. Der er ingen nye runtime-afhængigheder eller eksterne scripts/skrifttyper.
+
+Ændrede designfiler: `index.html`, `src/styles.css`, `src/icons.js`, `src/ui.js`, `src/library-ui.js`, `src/editor-ui.js`, `src/settings-ui.js` og `public/manifest.webmanifest`. `tests/e2e/iphone.spec.js` kontrollerer desuden tællernes opdatering efter redigering samt mindst 44 × 44 px touchmål og ingen vandret rulning ved 320 px på alle tre sider. Data, backup, Worker, kamera og metadataflows anvender de eksisterende moduler.
+
+Faktiske afsluttende lokale resultater for designændringen (Node.js 24.19.0 / pnpm 11.19.0):
+
+```text
+pnpm test: Test Files 9 passed (9); Tests 178 passed (178)
+pnpm lint: exit 0; ingen lintfejl
+pnpm build: 247 modules transformed; built in 674ms
+Service worker 9a7f6e89921bd123: 10 lokale filer; ingen API-cache.
+pnpm test:e2e: 32 passed (20.6s)
+pnpm security: 65 filer + 45 git-commits kontrolleret; 0 secret-fund.
+Browser-build: ingen servernøgler eller direkte OpenAI-kald.
+Rekursiv rg-kontrol af dist: 0 fund (rg exit 1)
+```
+
+Browsertestene bruger WebKit og Chromium med mock-kamera/API. Den nye tællertest blev først verificeret rød mod den gamle brugerflade. Under første fulde kørsel ramte en labelvælger favoritmærket, før filmformularen var åbnet; testen bruger nu checkbox-rollen. Den afsluttende fulde kørsel bestod. Den lokale brugerflade er også gennemgået visuelt ved 390 px og på desktop. Eget iPhone-kamera og live AI-præcision er ikke verificeret af disse kontroller.
+
+Designet er committed lokalt som `2d95dc3` i den verificerede clone, og de 11 ændrede kilde-/dokumentationsfiler er kopieret til den oprindelige projektmappe og verificeret med SHA-256. Den efterfølgende sikkerhedskontrol omfattede 65 filer og 46 commits med 0 fund. GitHub-integrationen afviste oprettelse af designbranchen med HTTP 403, og browserforsøget oprettede heller ikke branchen. Designopdateringen er derfor endnu ikke udgivet til Pages; den tidligere funktionelle PWA er fortsat live. Den oprindelige projektmappes `.git` er skrivebeskyttet i dette miljø. Commit og patch er bevaret særskilt, så arbejdet kan udgives uden at rekonstruere ændringerne.
+
 Løsningen er implementeret på `feat/secure-iphone-pwa` i repositoryet `tobibeepdk/min-filmsamling` og merged til `main` i pull request #1. Den efterfølgende kameratestrettelse er merged i pull request #2. GitHub-kontrollen af #2 bestod med 178 unit-tests og 28 browsertests (`28 passed (33.8s)`), lint, build og sikkerhedskontrol.
 
 ## Fund i den tidligere version
@@ -110,6 +156,6 @@ Browsertestene kører med iPhone 13-viewport i WebKit og Chromium. Kamera og eks
 2. Tilføj valgfrit `TMDB_READ_TOKEN` for de fulde filmoplysninger og eventuelt `BARCODE_PROVIDER_KEY`. Standard-stregkodeadapteren kan bruge UPCitemDB trial uden nøgle.
 3. Deploy Worker manuelt med `pnpm worker:deploy`; bevar Durable Object-binding og migration `v1`. Produktionsorigin er præcis `https://tobibeepdk.github.io`.
 4. Vælg GitHub Actions som Pages-source. Efter merge til `main` bygger og verificerer workflowen og udgiver `dist`.
-5. Indtast Worker-adressen i appen, test forbindelsen, log ind, og installér i Safari via **Føj til hjemmeskærm**.
+5. Appen har den udgivne Worker-adresse forudfyldt. Test forbindelsen, log ind, og installér i Safari via **Føj til hjemmeskærm**. En eksisterende tilpasset Worker-adresse bevares.
 
 Worker er udgivet, men ingen produktionssecrets er indtastet, og ingen liveprovider er kaldt. Fysisk iPhone-kamera, AI-præcision og brugerens model-/provideradgang kræver en efterfølgende liveprøve med egne secrets. Samlingen synkroniseres ikke mellem enheder. Data fra en anden origin, eksempelvis Netlify, flyttes med backup. Onlineomslag kræver netværk; egne gemte fotos kan vises offline.
