@@ -1,6 +1,6 @@
 # Implementering og verifikation – 1. oktober 2026
 
-Løsningen er implementeret på `feat/secure-iphone-pwa` i repositoryet `tobibeepdk/min-filmsamling`.
+Løsningen er implementeret på `feat/secure-iphone-pwa` i repositoryet `tobibeepdk/min-filmsamling` og merged til `main` i pull request #1. Den efterfølgende kameratestrettelse ligger på `codex/deterministic-camera-tests`.
 
 ## Fund i den tidligere version
 
@@ -38,7 +38,7 @@ Done in 459ms using pnpm v11.19.0
 pnpm test
 Test Files  9 passed (9)
      Tests  178 passed (178)
-  Duration  884ms
+  Duration  1.11s
 
 pnpm lint
 $ eslint src shared worker/src scripts tests *.js --no-warn-ignored
@@ -47,21 +47,23 @@ $ eslint src shared worker/src scripts tests *.js --no-warn-ignored
 pnpm build
 vite v7.3.6 building client environment for production...
 ✓ 246 modules transformed.
-✓ built in 1.22s
+✓ built in 967ms
 Service worker 442cb6cec1eab610: 10 lokale filer; ingen API-cache.
 
 pnpm security
-Sikkerhed: 63 filer + 11 git-commits kontrolleret; 0 secret-fund.
+Sikkerhed: 64 filer + 39 git-commits kontrolleret; 0 secret-fund.
 Browser-build: ingen servernøgler eller direkte OpenAI-kald.
 
 pnpm test:e2e
-Running 26 tests using 1 worker
-26 passed (34.5s)
+Running 28 tests using 1 worker
+28 passed (28.3s)
 
 Rekursiv rg-kontrol af dist: 0 fund (rg exit 1)
 ```
 
-Sikkerhedsscanningen ovenfor blev kørt før dokumentations-commits og kontrollerer mønstre for credentials, serverkonfiguration i browser-buildet og eksisterende git-historik. Den rekursive `rg`-kontrol søgte efter OpenAI-, app-, signerings-, TMDB- og stregkodenøgler samt direkte OpenAI-endpoint i `dist`. En afsluttende historikscan køres også efter commits.
+Sikkerhedsscanningen ovenfor blev kørt før testrettelsens commits og kontrollerer mønstre for credentials, serverkonfiguration i browser-buildet og eksisterende git-historik. Den rekursive `rg`-kontrol søgte efter OpenAI-, app-, signerings-, TMDB- og stregkodenøgler samt direkte OpenAI-endpoint i `dist`. En afsluttende historikscan køres også efter commits.
+
+Den første Pages-kørsel efter merge blev stoppet af en race i WebKit-testens mock: et automatisk kamerafund kunne lukke scanneren, mens testen trykkede på den manuelle reserveknap. Reserveforløbet afviser nu kameraadgang udtrykkeligt. En ny test kontrollerer afvist kameraadgang og videre covergenkendelse i begge browserprojekter. De to berørte tests blev desuden kørt tre gange i begge browsere: `12 passed (27.4s)`. Ingen timeout eller retry er hævet for at skjule fejlen.
 
 Vite viser en forventet advarsel om den separate klassiske `boot.js`. Filen kopieres fra `public` og skal kunne vise en fejlside, selv når appens modul ikke kan indlæses. Testen med blokerede modulfiler består i begge browsere. Projektet bruger JavaScript; ESLint anvendes, og der er ingen separat TypeScript-typekontrol.
 
