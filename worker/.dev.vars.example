@@ -1,0 +1,10 @@
+# Copy to worker/.dev.vars locally and enter your own values. Never commit .dev.vars.
+# Empty values fail closed until configured.
+OPENAI_API_KEY=""
+APP_ACCESS_KEY=""
+SESSION_SIGNING_KEY=""
+# Optional metadata/provider secrets:
+TMDB_READ_TOKEN=""
+BARCODE_PROVIDER_KEY=""
+# Optional HTTPS adapter (BARCODE_PROVIDER=json), e.g. your own JSON service.
+# BARCODE_PROVIDER_URL="https://example.invalid/lookup"
