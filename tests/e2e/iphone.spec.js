@@ -28,7 +28,13 @@ const recognition = {
 };
 async function setup(
   page,
-  { low = false, legacy = false, url = './', cameraAvailable = true } = {},
+  {
+    low = false,
+    legacy = false,
+    url = './',
+    cameraAvailable = true,
+    worker = 'https://films.example.workers.dev',
+  } = {},
 ) {
   await page.addInitScript(
     ({ legacy, cameraAvailable }) => {
@@ -86,7 +92,7 @@ async function setup(
     },
     { legacy, cameraAvailable },
   );
-  await page.route('https://films.example.workers.dev/**', async (route) => {
+  await page.route(`${worker}/**`, async (route) => {
     const headers = {
       'Access-Control-Allow-Origin': 'http://127.0.0.1:4173',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -191,6 +197,52 @@ async function isolatedOfflineServer() {
       }),
   };
 }
+for (const savedPreferences of [false, true]) {
+  test(`standard-Worker virker uden adresseindtastning ${savedPreferences ? 'med tom gemt adresse' : 'ved ny installation'}`, async ({
+    page,
+  }) => {
+    await setup(page, { worker: 'https://min-filmsamling-api.min-filmsamling.workers.dev' });
+    if (savedPreferences) {
+      await page.evaluate(async () => {
+        const db = await new Promise((resolve, reject) => {
+          const request = indexedDB.open('filmsamling-v2');
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction('settings', 'readwrite');
+          tx.objectStore('settings').put({
+            id: 'preferences',
+            language: 'da-DK',
+            workerUrl: '',
+          });
+          tx.oncomplete = resolve;
+          tx.onerror = tx.onabort = () => reject(tx.error);
+        });
+        db.close();
+      });
+      await page.reload();
+    }
+    await page.getByRole('button', { name: 'Indstillinger', exact: true }).click();
+    await expect(page.getByLabel('Worker-adresse')).toHaveValue(
+      'https://min-filmsamling-api.min-filmsamling.workers.dev',
+    );
+    await page.getByRole('button', { name: 'Test forbindelse', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Forbindelse til Worker er OK');
+    await page.getByLabel('Adgangsnøgle').fill('example-access');
+    await page.getByRole('button', { name: 'Log ind', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Logget ind');
+  });
+}
+test('brugerens Worker-adresse bevares ved genindlæsning', async ({ page }) => {
+  await setup(page);
+  await login(page);
+  await page.reload();
+  await page.getByRole('button', { name: 'Indstillinger', exact: true }).click();
+  await expect(page.getByLabel('Worker-adresse')).toHaveValue('https://films.example.workers.dev');
+  await page.getByRole('button', { name: 'Test forbindelse', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Forbindelse til Worker er OK');
+});
 test('ukendt EAN går til AI og gemmer The Wicked uden titelindtastning', async ({
   page,
   browserName,
@@ -264,6 +316,45 @@ test('migration bevarer samling og kladde og fjerner gammelt token', async ({ pa
   expect(await page.evaluate(() => localStorage.getItem('filmsamling_settings_v4'))).not.toContain(
     'example-old-credential',
   );
+});
+test('samlingens overblik følger ændringer i set og favoritter', async ({ page }) => {
+  await setup(page, { legacy: true });
+  const overview = page.getByRole('region', { name: 'Samlingen i overblik' });
+  await expect(overview).toContainText(/1\s*film/i);
+  await expect(overview).toContainText(/1\s*set/i);
+  await expect(overview).toContainText(/1\s*favoritter/i);
+  await page.getByRole('button', { name: 'Åbn og rediger', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Favorit', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Set', exact: true }).uncheck();
+  await page.getByRole('button', { name: 'Gem film', exact: true }).click();
+  await expect(overview).toContainText(/1\s*film/i);
+  await expect(overview).toContainText(/0\s*set/i);
+  await expect(overview).toContainText(/0\s*favoritter/i);
+});
+test('smal iPhone-visning har synlige touchmål uden vandret rulning', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await setup(page, { legacy: true });
+  for (const view of ['Film', 'Tilføj', 'Indstillinger']) {
+    const navigation = page.getByRole('navigation', { name: 'Hovedmenu' });
+    await navigation.getByRole('button', { name: view, exact: true }).click();
+    await expect(navigation.getByRole('button', { name: view, exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    const dimensions = await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      buttons: [...document.querySelectorAll('main button, nav button')].map((button) => {
+        const box = button.getBoundingClientRect();
+        return { width: box.width, height: box.height, text: button.textContent };
+      }),
+    }));
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width);
+    for (const button of dimensions.buttons) {
+      expect(button.width, button.text).toBeGreaterThanOrEqual(44);
+      expect(button.height, button.text).toBeGreaterThanOrEqual(44);
+    }
+  }
 });
 test.describe('offline', () => {
   test.use({ serviceWorkers: 'allow' });
