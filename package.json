@@ -14,6 +14,7 @@
     "security": "node scripts/security-check.mjs",
     "worker:dev": "wrangler dev --config worker/wrangler.toml",
     "worker:deploy": "wrangler deploy --config worker/wrangler.toml",
+    "worker:setup": "bash scripts/setup-worker-secrets.sh",
     "format": "prettier --write src shared worker/src scripts tests *.js index.html public/service-worker.js public/boot.js"
   },
   "dependencies": {
