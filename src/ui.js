@@ -1,3 +1,4 @@
+import { icon } from './icons.js';
 export function el(tag, attributes = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attributes)) {
@@ -34,7 +35,7 @@ export function image(url, title) {
     typeof url !== 'string' ||
     !/^(https:\/\/|blob:|data:image\/(jpeg|png|webp|gif);base64,)/i.test(url)
   )
-    return el('div', { class: 'placeholder' }, '🎬');
+    return el('div', { class: 'placeholder', 'aria-label': 'Intet cover' }, icon('film'));
   const picture = el('img', {
     src: url,
     alt: 'Cover til ' + (title || 'filmen'),

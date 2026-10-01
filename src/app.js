@@ -3,6 +3,7 @@ import { openDatabase } from './db.js';
 import { migrateLegacy } from './migration.js';
 import { exportBackup, importBackup, cleanMovie } from './backup.js';
 import { createApi, workerUrl } from './api.js';
+import { withWorkerDefault } from './config.js';
 import { processBarcode } from './workflow.js';
 import { decideRecognition } from './cover-ai.js';
 import { mergeMovieMetadata } from '../shared/movie.js';
@@ -502,7 +503,9 @@ window.addEventListener('offline', network);
 async function start() {
   db = await openDatabase();
   const migrated = await migrateLegacy(db);
-  settings = (await db.get('settings', 'preferences')) || { id: 'preferences', language: 'da-DK' };
+  settings = withWorkerDefault(
+    (await db.get('settings', 'preferences')) || { id: 'preferences', language: 'da-DK' },
+  );
   draft = (await db.get('drafts', 'current')) || null;
   api = createApi(db, () => settings.workerUrl);
   await render();

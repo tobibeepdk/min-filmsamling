@@ -66,6 +66,14 @@ pnpm exec wrangler secret put APP_ACCESS_KEY --config worker/wrangler.toml
 pnpm exec wrangler secret put SESSION_SIGNING_KEY --config worker/wrangler.toml
 ```
 
+Som genvej kan du køre de tre interaktive secret-prompts samlet fra en terminal:
+
+```bash
+pnpm worker:setup
+```
+
+Genvejen bruger Wranglers skjulte prompts og tilbyder også det valgfrie TMDB-token. Secretværdier skal fortsat kun indtastes i prompts; genvejen modtager dem ikke som argumenter eller fra filer.
+
 Brug mindst 32 tegn til `SESSION_SIGNING_KEY`; brug også en lang tilfældig `APP_ACCESS_KEY`. `APP_ACCESS_KEY` er den adgangsnøgle, du senere bruger til login i appen. `SESSION_SIGNING_KEY` bruges kun på serveren til at signere sessioner.
 
 Secrets skal blive i Cloudflares secret-lager. Indsæt dem aldrig i `wrangler.toml`, frontendkode, et `VITE_`-felt, en backup, et issue eller en commit. Kommandolinjen ovenfor indeholder kun secretens navn, så værdien ikke bliver et shell-argument.
@@ -152,7 +160,7 @@ Workflowen verificerer koden og kører `pnpm worker:deploy`. Runtime-secrets fra
 ## 6. Brug appen på iPhone
 
 1. Åbn **https://tobibeepdk.github.io/min-filmsamling/** i Safari.
-2. Indtast Workerens HTTPS-adresse i appens indstillinger, og tryk **Test forbindelse**. Appen skal vise, at forbindelsen er OK.
+2. Appens indstillinger har standardadressen `https://min-filmsamling-api.min-filmsamling.workers.dev` forudfyldt på nye installationer, eller hvis ingen Worker-adresse er gemt. En eksisterende tilpasset adresse bevares. Hvis du bruger din egen Worker, kan du ændre adressen. Tryk **Test forbindelse** for at kontrollere forbindelsen.
 3. Log på med `APP_ACCESS_KEY`. Appen gemmer kun den kortlivede session og dens udløbstid; selve adgangsnøglen gemmes ikke.
 4. Vælg **Del → Føj til hjemmeskærm → Tilføj**.
 5. Tryk **Scan stregkode**, og giv kameratilladelse. En ukendt kode åbner automatisk coverkameraet; fotografér hele forsiden. Appen identificerer titlen og søger filmdata. Ved tvivl vælger du en af de store kandidatknapper. Du behøver ikke indtaste titlen.

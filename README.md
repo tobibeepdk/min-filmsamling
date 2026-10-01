@@ -16,6 +16,7 @@ En dansk PWA til en lokal filmsamling på iPhone. Samlingen, kladder og egne cov
 - Bevar egne covers, noter, placering, favoritter og set-status, når metadata tilføjes.
 - Gem kladder automatisk og eksportér/importér JSON-backups med coverbilleder.
 - Installér fra Safari via **Del → Føj til hjemmeskærm**.
+- Mørkt biografdesign med gyldne knapper, formatmærker på filmkort og overblik over film, set og favoritter. Bundmenuen har ikoner og store touchmål til iPhone.
 
 Workerens secrets bliver på serveren. Appen bruger en kortlivet session efter login med en særskilt adgangsnøgle. OpenAI- og TMDB-nøgler skal indtastes i Wranglers secret-prompts, som beskrevet i vejledningen.
 
