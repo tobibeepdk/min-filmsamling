@@ -4,6 +4,8 @@ Appen består af en statisk frontend på GitHub Pages og en Cloudflare Worker ti
 
 Frontendens adresse er **https://tobibeepdk.github.io/min-filmsamling/** efter Pages-deploy. Du skal først oprette Worker og secrets og derefter gemme Workerens HTTPS-adresse i appens indstillinger.
 
+Worker er udgivet for dette repository. Dens adresse til appens indstillinger er `https://min-filmsamling-api.min-filmsamling.workers.dev`. Login og AI kræver stadig de tre obligatoriske secrets i trin 3; en vellykket forbindelsestest alene bekræfter ikke, at secrets er konfigureret.
+
 ## 1. Installér udviklingsværktøjerne
 
 Brug Node.js 24 og pnpm 11.19.0. Hvis pnpm mangler, kan det installeres med:
@@ -27,6 +29,8 @@ Log på Cloudflare gennem Wrangler:
 ```bash
 pnpm exec wrangler login
 ```
+
+Wrangler gemmer Cloudflare-login i brugerens CLI-profil uden for repositoryet. Kopiér aldrig profilen eller dens credentials ind i projektet.
 
 Kontrollér `[vars]` i `worker/wrangler.toml`:
 

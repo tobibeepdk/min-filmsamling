@@ -1,6 +1,6 @@
 # Implementering og verifikation – 1. oktober 2026
 
-Løsningen er implementeret på `feat/secure-iphone-pwa` i repositoryet `tobibeepdk/min-filmsamling` og merged til `main` i pull request #1. Den efterfølgende kameratestrettelse ligger på `codex/deterministic-camera-tests`.
+Løsningen er implementeret på `feat/secure-iphone-pwa` i repositoryet `tobibeepdk/min-filmsamling` og merged til `main` i pull request #1. Den efterfølgende kameratestrettelse er merged i pull request #2. GitHub-kontrollen af #2 bestod med 178 unit-tests og 28 browsertests (`28 passed (33.8s)`), lint, build og sikkerhedskontrol.
 
 ## Fund i den tidligere version
 
@@ -51,7 +51,7 @@ vite v7.3.6 building client environment for production...
 Service worker 442cb6cec1eab610: 10 lokale filer; ingen API-cache.
 
 pnpm security
-Sikkerhed: 64 filer + 39 git-commits kontrolleret; 0 secret-fund.
+Sikkerhed: 64 filer + 42 git-commits kontrolleret; 0 secret-fund.
 Browser-build: ingen servernøgler eller direkte OpenAI-kald.
 
 pnpm test:e2e
@@ -61,7 +61,7 @@ Running 28 tests using 1 worker
 Rekursiv rg-kontrol af dist: 0 fund (rg exit 1)
 ```
 
-Sikkerhedsscanningen ovenfor blev kørt før testrettelsens commits og kontrollerer mønstre for credentials, serverkonfiguration i browser-buildet og eksisterende git-historik. Den rekursive `rg`-kontrol søgte efter OpenAI-, app-, signerings-, TMDB- og stregkodenøgler samt direkte OpenAI-endpoint i `dist`. En afsluttende historikscan køres også efter commits.
+Sikkerhedsscanningen ovenfor blev kørt efter testrettelsens commits og før denne deploymentopdatering. Den kontrollerer mønstre for credentials, serverkonfiguration i browser-buildet og eksisterende git-historik. Den rekursive `rg`-kontrol søgte efter OpenAI-, app-, signerings-, TMDB- og stregkodenøgler samt direkte OpenAI-endpoint i `dist`. En afsluttende historikscan køres også efter commits.
 
 Den første Pages-kørsel efter merge blev stoppet af en race i WebKit-testens mock: et automatisk kamerafund kunne lukke scanneren, mens testen trykkede på den manuelle reserveknap. Reserveforløbet afviser nu kameraadgang udtrykkeligt. En ny test kontrollerer afvist kameraadgang og videre covergenkendelse i begge browserprojekter. De to berørte tests blev desuden kørt tre gange i begge browsere: `12 passed (27.4s)`. Ingen timeout eller retry er hævet for at skjule fejlen.
 
@@ -77,6 +77,19 @@ Total Upload: 29.38 KiB / gzip: 9.29 KiB
 ```
 
 Dette er en lokal bundlekontrol, ikke en udgivelse.
+
+Worker er efterfølgende udgivet til Cloudflare med `pnpm worker:deploy` (exit 0). Wrangler oprettede `workers.dev`-adressen og bevarede den konfigurerede Durable Object-binding og migration:
+
+```text
+Total Upload: 29.38 KiB / gzip: 9.29 KiB
+Worker Startup Time: 1 ms
+Uploaded min-filmsamling-api (5.04 sec)
+Deployed min-filmsamling-api triggers (1.97 sec)
+https://min-filmsamling-api.min-filmsamling.workers.dev
+Current Version ID: 2555bd94-f547-43a3-b4df-b15530dfde0a
+```
+
+Livekontrol uden providerkald: `GET /health` med produktionsorigin gav HTTP 200 og `{"ok":true}`; forkert origin gav HTTP 403 uden CORS-tilladelse; korrekt `OPTIONS /identify-cover` gav HTTP 204 med kun POST tilladt. `POST /session` gav HTTP 503 med den generiske opsætningsfejl, fordi de obligatoriske secrets endnu ikke er indtastet. Dette verificerer udgivelse, forbindelsen og CORS, men ikke login, AI eller metadata hos liveudbyderne.
 
 ## Hvad testene verificerer
 
@@ -99,4 +112,4 @@ Browsertestene kører med iPhone 13-viewport i WebKit og Chromium. Kamera og eks
 4. Vælg GitHub Actions som Pages-source. Efter merge til `main` bygger og verificerer workflowen og udgiver `dist`.
 5. Indtast Worker-adressen i appen, test forbindelsen, log ind, og installér i Safari via **Føj til hjemmeskærm**.
 
-Ingen produktionssecrets er indtastet, ingen liveprovider er kaldt, og Worker er ikke udgivet. Fysisk iPhone-kamera, AI-præcision og brugerens model-/provideradgang kræver en efterfølgende liveprøve. Samlingen synkroniseres ikke mellem enheder. Data fra en anden origin, eksempelvis Netlify, flyttes med backup. Onlineomslag kræver netværk; egne gemte fotos kan vises offline.
+Worker er udgivet, men ingen produktionssecrets er indtastet, og ingen liveprovider er kaldt. Fysisk iPhone-kamera, AI-præcision og brugerens model-/provideradgang kræver en efterfølgende liveprøve med egne secrets. Samlingen synkroniseres ikke mellem enheder. Data fra en anden origin, eksempelvis Netlify, flyttes med backup. Onlineomslag kræver netværk; egne gemte fotos kan vises offline.
