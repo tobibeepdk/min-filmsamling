@@ -26,9 +26,12 @@ const recognition = {
   visibleText: ['THE WICKED'],
   candidates: [{ title: 'The Wicked', year: 2013, confidence: 0.94 }],
 };
-async function setup(page, { low = false, legacy = false, url = './' } = {}) {
+async function setup(
+  page,
+  { low = false, legacy = false, url = './', cameraAvailable = true } = {},
+) {
   await page.addInitScript(
-    ({ legacy }) => {
+    ({ legacy, cameraAvailable }) => {
       if (legacy && !localStorage.getItem('fixtureLoaded')) {
         localStorage.setItem(
           'filmsamling_v4',
@@ -57,6 +60,8 @@ async function setup(page, { low = false, legacy = false, url = './' } = {}) {
         configurable: true,
         value: {
           getUserMedia: async () => {
+            // A fallback test must never race an automatic scan, even when WebKit supports captureStream.
+            if (!cameraAvailable) throw new DOMException('Mock fallback', 'NotAllowedError');
             const c = document.createElement('canvas');
             c.width = 640;
             c.height = 960;
@@ -79,7 +84,7 @@ async function setup(page, { low = false, legacy = false, url = './' } = {}) {
         }
       };
     },
-    { legacy },
+    { legacy, cameraAvailable },
   );
   await page.route('https://films.example.workers.dev/**', async (route) => {
     const headers = {
@@ -190,7 +195,7 @@ test('ukendt EAN går til AI og gemmer The Wicked uden titelindtastning', async 
   page,
   browserName,
 }) => {
-  await setup(page);
+  await setup(page, { cameraAvailable: browserName !== 'webkit' });
   await login(page);
   await page.getByRole('button', { name: 'Film', exact: true }).click();
   await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
@@ -221,6 +226,24 @@ test('ukendt EAN går til AI og gemmer The Wicked uden titelindtastning', async 
   }
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
   expect(calls).toBe(0);
+});
+test('afvist kameratilladelse fører fra stregkode til coverfoto', async ({ page }) => {
+  await setup(page, { cameraAvailable: false });
+  await login(page);
+  await page.getByRole('button', { name: 'Film', exact: true }).click();
+  await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
+  await expect(
+    page.getByText(
+      'Kameraadgang blev afvist. Tillad kameraet i Safari, eller tag et billede af stregkoden.',
+    ),
+  ).toBeVisible();
+  await page.getByLabel('Stregkodenummer').fill('7393834487707');
+  await page.getByRole('button', { name: 'Brug nummer' }).click();
+  await expect(
+    page.getByText('Stregkoden er ukendt. Tag et billede af forsiden, så finder appen filmen.'),
+  ).toBeVisible();
+  await uploadCover(page);
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
 });
 test('lav confidence giver store kandidatknapper', async ({ page }) => {
   await setup(page, { low: true });
