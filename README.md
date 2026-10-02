@@ -12,6 +12,7 @@ En dansk PWA til en lokal filmsamling på iPhone. Samlingen, kladder og egne cov
 
 - Scan EAN-13, EAN-8 og UPC-A med kameraet eller fra et foto; indtastning er også mulig.
 - Genkend en filmtitel fra et coverfoto med OpenAI gennem en Cloudflare Worker.
+- Behold coverfotoet ved et fejlet opslag, og prøv analysen igen eller beskær billedet. Fejl vises med sikre fejlkoder uden udbyderens rå fejltekst.
 - Hent filmoplysninger fra TMDB og stregkodeoplysninger fra en konfigurerbar udbyder.
 - Bevar egne covers, noter, placering, favoritter og set-status, når metadata tilføjes.
 - Gem kladder automatisk og eksportér/importér JSON-backups med coverbilleder.
@@ -41,6 +42,8 @@ pnpm test:e2e
 ```
 
 Produktionsfiler dannes i `dist/`. GitHub Actions verificerer ændringer og udgiver Pages fra `main`; Worker udgives særskilt med en manuel workflow eller `pnpm worker:deploy`.
+
+Hvis port 4173 bruges af et andet lokalt projekt, kan browser-testene køres med `FILMSAMLING_TEST_PORT=4183 pnpm test:e2e`.
 
 ## Data og drift
 

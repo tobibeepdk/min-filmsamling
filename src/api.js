@@ -1,3 +1,4 @@
+import { serviceErrorMessage } from '../shared/service-errors.js';
 export function workerUrl(value) {
   let url;
   try {
@@ -49,11 +50,39 @@ export function createApi(db, getUrl, fetcher = fetch) {
       });
       if (response.status === 401) await db.delete('session', 'current');
       if (!response.ok) {
+        let code;
+        try {
+          code = (await response.json()).code;
+        } catch (error) {
+          if (error.name === 'AbortError') throw error;
+        }
+        const description = serviceErrorMessage(code);
+        if (description && [429, 502, 503].includes(response.status)) {
+          const source =
+            path === '/identify-cover'
+              ? 'Covergenkendelse'
+              : path === '/lookup-barcode'
+                ? 'Stregkodeopslag'
+                : 'Filmopslag';
+          throw new Error(`${source}: ${description} Kladden er gemt. Fejlkode: ${code}.`);
+        }
         if (response.status === 429)
           throw new Error('Forbrugsgrænsen er nået. Vent lidt og prøv igen. Kladden er gemt.');
         if (response.status === 401 || response.status === 403)
           throw new Error(
             'Adgang blev afvist. Kontrollér login og Workerens tilladte origin i Indstillinger.',
+          );
+        if (response.status === 413)
+          throw new Error(
+            'Billedet er for stort. Tag et nyt foto eller beskær billedet. Kladden er gemt.',
+          );
+        if (response.status === 400 || response.status === 415)
+          throw new Error(
+            'Billedet eller oplysningerne kunne ikke læses. Prøv et nyt foto. Kladden er gemt.',
+          );
+        if (response.status === 503)
+          throw new Error(
+            'Tjenesten er ikke klar. Kontrollér Workerens opsætning. Kladden er gemt.',
           );
         throw new Error('Filmopslaget kunne ikke gennemføres. Prøv igen. Kladden er gemt.');
       }

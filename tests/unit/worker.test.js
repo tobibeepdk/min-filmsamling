@@ -322,6 +322,113 @@ describe('Worker ingress and sessions', () => {
   });
 });
 describe('Vision proxy', () => {
+  test.each([
+    [
+      401,
+      { error: { code: 'invalid_api_key', message: 'private-provider-detail' } },
+      'PROVIDER_AUTH',
+    ],
+    [403, { error: { message: 'private-provider-detail' } }, 'PROVIDER_ACCESS'],
+    [
+      404,
+      { error: { code: 'model_not_found', message: 'private-provider-detail' } },
+      'PROVIDER_ACCESS',
+    ],
+    [
+      429,
+      { error: { code: 'insufficient_quota', message: 'private-provider-detail' } },
+      'PROVIDER_QUOTA',
+    ],
+    [
+      429,
+      { error: { code: 'rate_limit_exceeded', message: 'private-provider-detail' } },
+      'PROVIDER_RATE_LIMIT',
+    ],
+    [
+      400,
+      { error: { code: 'invalid_request', message: 'private-provider-detail' } },
+      'PROVIDER_REQUEST',
+    ],
+  ])(
+    'provider HTTP %s giver en allowlistet fejlkode uden providerindhold',
+    async (status, body, code) => {
+      const { env } = environment();
+      const token = await login(env);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => json(body, status)),
+      );
+      const response = await worker.fetch(request('/identify-cover', { image }, token), env);
+      expect(response.status).toBe(status === 429 ? 429 : 502);
+      const result = await response.json();
+      expect(result.code).toBe(code);
+      expect(JSON.stringify(result)).not.toContain('private-provider-detail');
+      expect(JSON.stringify(result)).not.toContain('invalid_api_key');
+      if (code === 'PROVIDER_QUOTA') expect(response.headers.has('Retry-After')).toBe(false);
+    },
+  );
+
+  test('en afbrudt upstream-analyse skelnes fra forkert adgang og lækker ikke URL eller nøgle', async () => {
+    const { env } = environment();
+    const token = await login(env);
+    let started;
+    const upstreamStarted = new Promise((resolve) => {
+      started = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url, { signal }) =>
+          new Promise((_resolve, reject) => {
+            started();
+            signal.addEventListener('abort', () =>
+              reject(new DOMException('private-request', 'AbortError')),
+            );
+          }),
+      ),
+    );
+    const pending = worker.fetch(request('/identify-cover', { image }, token), env);
+    await upstreamStarted;
+    await vi.advanceTimersByTimeAsync(25001);
+    const response = await pending;
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ code: 'PROVIDER_TIMEOUT' });
+  });
+
+  test.each([
+    [
+      { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [] },
+      'AI_INCOMPLETE',
+    ],
+    [
+      {
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'refusal', refusal: 'private-refusal' }] }],
+      },
+      'AI_REFUSED',
+    ],
+    [
+      {
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'not-json' }] }],
+      },
+      'AI_INVALID_RESULT',
+    ],
+  ])('et AI-svar uden brugbare filmdata kan diagnosticeres sikkert', async (body, code) => {
+    const { env } = environment();
+    const token = await login(env);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(body)),
+    );
+    const response = await worker.fetch(request('/identify-cover', { image }, token), env);
+    expect(response.status).toBe(502);
+    const result = await response.json();
+    expect(result.code).toBe(code);
+    expect(JSON.stringify(result)).not.toContain('private-refusal');
+    expect(JSON.stringify(result)).not.toContain('not-json');
+  });
+
   test('uses Responses image input, configured model, strict schema and store false', async () => {
     const { env } = environment();
     const token = await login(env);

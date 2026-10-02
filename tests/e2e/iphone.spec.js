@@ -94,7 +94,7 @@ async function setup(
   );
   await page.route(`${worker}/**`, async (route) => {
     const headers = {
-      'Access-Control-Allow-Origin': 'http://127.0.0.1:4173',
+      'Access-Control-Allow-Origin': new URL(page.url()).origin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };

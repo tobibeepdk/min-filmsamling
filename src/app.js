@@ -230,7 +230,7 @@ async function barcode(code) {
     if (task.signal.aborted) return;
     if (result.next === 'cover')
       await cover('Stregkoden er ukendt. Tag et billede af forsiden, så finder appen filmen.');
-    else if (result.next === 'lookup') await lookup();
+    else if (result.next === 'lookup') await safe(lookup)();
     else status('Filmen blev fundet i den lokale stregkodekobling.');
   } catch (error) {
     if (!task.signal.aborted) {
@@ -288,7 +288,7 @@ async function identified(movie, task) {
   await render(task);
   if (task.signal.aborted) return;
   status('Titlen er fundet. Henter filmoplysninger…');
-  await lookup();
+  await safe(lookup)();
 }
 async function lookup() {
   const task = begin();
