@@ -67,7 +67,7 @@ async function setup(page, handlers = {}) {
   });
   await page.route(`${worker}/**`, async (route) => {
     const headers = {
-      'Access-Control-Allow-Origin': 'http://127.0.0.1:4173',
+      'Access-Control-Allow-Origin': new URL(page.url()).origin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
@@ -168,6 +168,189 @@ async function uploadCover(page) {
   await page
     .getByLabel('Tag eller vælg coverfoto')
     .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(bytes) });
+}
+
+test('et fejlet coveropslag bevarer fotoet og kan prøves igen uden ny titel eller nyt foto', async ({
+  page,
+}, testInfo) => {
+  await setup(page);
+  let calls = 0;
+  let firstImage;
+  await page.route(`${worker}/identify-cover`, async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    calls += 1;
+    const image = route.request().postDataJSON().image;
+    if (calls === 1) firstImage = image;
+    else expect(image).toBe(firstImage);
+    await route.fulfill({
+      status: calls === 1 ? 502 : 200,
+      json:
+        calls === 1 ? { error: 'private-provider-detail', code: 'PROVIDER_TIMEOUT' } : recognition,
+      headers: { 'Access-Control-Allow-Origin': new URL(page.url()).origin },
+    });
+  });
+  await login(page);
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByLabel('Noter').fill('Bevar mine noter efter fejlen');
+  await page.getByLabel('Placering').fill('Reol ved sofaen');
+  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
+  await uploadCover(page);
+  const dialog = page.getByRole('dialog', { name: 'Find film fra cover', exact: true });
+  await expect(dialog).toContainText('PROVIDER_TIMEOUT');
+  await expect(dialog).not.toContainText('private-provider-detail');
+  await expect(dialog.getByAltText('Dit coverfoto')).toBeVisible();
+  await expect(dialog.getByLabel('Coverkamera')).not.toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Tag billede', exact: true })).not.toBeVisible();
+  await dialog.screenshot({ path: testInfo.outputPath('cover-retry.png') });
+  await dialog.getByRole('button', { name: 'Prøv analysen igen', exact: true }).click();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
+  await expect(page.getByLabel('Instruktør')).toHaveValue('Peter Winther');
+  await expect(page.getByLabel('Noter')).toHaveValue('Bevar mine noter efter fejlen');
+  await expect(page.getByLabel('Placering')).toHaveValue('Reol ved sofaen');
+  expect(calls).toBe(2);
+  expect((await records(page)).drafts.find((draft) => draft.id === 'new')).toMatchObject({
+    title: 'The Wicked',
+    notes: 'Bevar mine noter efter fejlen',
+    location: 'Reol ved sofaen',
+  });
+});
+
+test('et forsinket genforsøg kan annulleres med nyt foto uden at ændre den nyere kladde', async ({
+  page,
+}) => {
+  await setup(page);
+  const requested = deferred();
+  const release = deferred();
+  let calls = 0;
+  await page.route(`${worker}/identify-cover`, async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fallback();
+    calls += 1;
+    const ownCall = calls;
+    if (ownCall === 2) {
+      requested.resolve();
+      await release.promise;
+    }
+    try {
+      await route.fulfill({
+        status: ownCall === 1 ? 502 : 200,
+        json: ownCall === 1 ? { code: 'PROVIDER_TIMEOUT' } : recognition,
+        headers: { 'Access-Control-Allow-Origin': new URL(page.url()).origin },
+      });
+    } catch (error) {
+      if (!route.request().failure() && !page.isClosed()) throw error;
+    }
+  });
+  await login(page);
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByLabel('Noter').fill('Noten må ikke mistes ved genforsøg');
+  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
+  await uploadCover(page);
+  await page.getByRole('button', { name: 'Prøv analysen igen', exact: true }).click();
+  await requested.promise;
+  const cancelled = page.waitForEvent('requestfailed', {
+    predicate: (request) => request.url() === `${worker}/identify-cover`,
+  });
+  await page.getByRole('button', { name: 'Tag nyt billede', exact: true }).click();
+  await cancelled;
+  release.resolve();
+  await expect(
+    page.getByRole('dialog', { name: 'Find film fra cover', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('');
+  await uploadCover(page);
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
+  await expect(page.getByLabel('Noter')).toHaveValue('Noten må ikke mistes ved genforsøg');
+});
+
+test('et utilgængeligt livekamera viser foto-reserven uden et sort kamerafelt', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Find film fra cover', exact: true });
+  await expect(dialog).toContainText('Brug fotoknappen');
+  await expect(dialog.getByLabel('Coverkamera')).not.toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Tag billede', exact: true })).not.toBeVisible();
+  await expect(dialog.getByLabel('Tag eller vælg coverfoto')).toBeVisible();
+});
+
+test('et forsinket kamera efter et ugyldigt foto efterlader ingen sort kameraflade', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    window.stoppedCameraTracks = 0;
+    navigator.mediaDevices.getUserMedia = () =>
+      new Promise((resolve) => {
+        window.finishCameraStartup = () =>
+          resolve({
+            getTracks: () => [
+              {
+                stop: () => {
+                  window.stoppedCameraTracks += 1;
+                },
+              },
+            ],
+          });
+      });
+  });
+  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Find film fra cover', exact: true });
+  await dialog.getByLabel('Tag eller vælg coverfoto').setInputFiles({
+    name: 'invalid.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('not-a-photo'),
+  });
+  await expect(dialog).toContainText('Vælg en billedfil');
+  await page.evaluate(() => window.finishCameraStartup());
+  await expect.poll(() => page.evaluate(() => window.stoppedCameraTracks)).toBe(1);
+  await expect(dialog.getByLabel('Coverkamera')).not.toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Tag billede', exact: true })).not.toBeVisible();
+  await expect(dialog.getByLabel('Tag eller vælg coverfoto')).toBeVisible();
+});
+
+for (const source of ['stregkode', 'cover']) {
+  test(`metadatafejl efter ${source} vises og bevarer den fundne titel og brugerens noter`, async ({
+    page,
+  }) => {
+    await setup(page, {
+      '/lookup-barcode': () => ({
+        found: true,
+        title: 'The Wicked',
+        format: 'DVD',
+        source: 'upcitemdb',
+      }),
+    });
+    await page.route(`${worker}/search-movie`, async (route) => {
+      if (route.request().method() === 'OPTIONS') return route.fallback();
+      await route.fulfill({
+        status: 502,
+        json: { code: 'PROVIDER_AUTH', error: 'private-provider-detail' },
+        headers: { 'Access-Control-Allow-Origin': new URL(page.url()).origin },
+      });
+    });
+    await login(page);
+    await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+    await page.getByLabel('Noter').fill('Bevar trods metadatafejl');
+    if (source === 'cover') {
+      await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
+      await uploadCover(page);
+    } else {
+      await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
+      await page.getByLabel('Stregkodenummer').fill('7393834487707');
+      await page.getByRole('button', { name: 'Brug nummer', exact: true }).click();
+    }
+    await expect(page.getByRole('status')).toContainText('PROVIDER_AUTH');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
+    await expect(page.getByLabel('Noter')).toHaveValue('Bevar trods metadatafejl');
+    await page.getByRole('button', { name: 'Gem film', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'The Wicked', exact: true })).toBeVisible();
+    expect((await records(page)).movies[0]).toMatchObject({
+      title: 'The Wicked',
+      notes: 'Bevar trods metadatafejl',
+    });
+  });
 }
 
 test('en ny lokal stregkodescanning overskriver ikke en annulleret filmredigering', async ({
