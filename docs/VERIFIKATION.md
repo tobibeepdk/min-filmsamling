@@ -1,161 +1,82 @@
-# Implementering og verifikation – 1. oktober 2026
+# Implementering og verifikation – 2. oktober 2026
 
-## Designopdatering
+## Rettelse af cover- og opslagfejl
 
-Den afsluttende opsætningsændring forudfylder den udgivne Workers offentlige adresse, hvis ingen adresse er gemt. Brugerens egen Worker-adresse og øvrige indstillinger bevares. `pnpm worker:setup` åbner Wranglers egne skjulte prompts for de tre obligatoriske secrets og tilbyder TMDB-token; scriptet modtager aldrig secretværdier som argumenter eller filer. Fire nye unit-tests og seks browsercases dækker standardadresse, tomme gamle indstillinger og brugerens egen adresse.
+Et fejlet coveropslag efterlod tidligere et stoppet, sort kamera og en aktiv **Tag billede**-knap. Appen viser nu det komprimerede foto, mens analysen kører og ved en fejl. Brugeren kan vælge **Prøv analysen igen**, beskære, tage et nyt foto eller annullere med kladden bevaret. Samme komprimerede billedbytes genbruges ved et manuelt genforsøg. Preview og midlertidigt foto frigives, når vinduet lukkes; fotoet gemmes ikke som AI-materiale i databasen eller backup.
 
-Faktisk output efter denne ændring:
+Fejl fra metadataopslag vises også efter en allerede identificeret titel. Titlen og egne noter kan fortsat gemmes. Stoppet eller utilgængeligt livekamera skjules; input-capture-reserven er tilgængelig.
 
-```text
-pnpm install --frozen-lockfile: Already up to date; Done in 359ms using pnpm v11.19.0
-pnpm test: Test Files 10 passed (10); Tests 182 passed (182); Duration 1.26s
-pnpm lint: exit 0; ingen lintfejl
-pnpm build: 248 modules transformed; built in 666ms
-Service worker 74f92cab64ddfe88: 10 lokale filer; ingen API-cache.
-pnpm security: 68 filer + 47 git-commits kontrolleret; 0 secret-fund.
-Browser-build: ingen servernøgler eller direkte OpenAI-kald.
-pnpm test:e2e: 38 passed (24.2s)
-git diff --check: exit 0
-bash -n scripts/setup-worker-secrets.sh: exit 0
-Secret-script uden interaktiv terminal: forventet exit 2; kræver skjulte Wrangler-prompts.
-Rekursiv rg-kontrol af dist: 0 fund (rg exit 1)
-```
-
-De første browserforsøg blev stoppet af miljøets server-/browserrettigheder før testene kunne udføres. Den afsluttende almindelige `pnpm test:e2e` ovenfor kørte hele suiten og bestod i WebKit og Chromium. GitHub-connectoren returnerede stadig HTTP 403 efter genforbindelse; branchen blev derefter oprettet og filer publiceret gennem GitHubs webinterface. Pages udgives først efter de fulde GitHub-kontroller og merge.
-
-Workerens `wrangler secret list` returnerede `[]`: produktionssecrets er endnu ikke indtastet. Health og CORS er livekontrolleret som beskrevet nedenfor, men login, cover-AI og TMDB kræver brugerens egne secrets. De må kun indtastes i Wranglers interaktive prompts.
-
-På `codex/iphone-design-refresh` er samling, filmredigering og indstillinger opdateret med et mørkt biografudtryk og varm gylden accent. Scan- og coverknapper står ved siden af hinanden på iPhone; formatmærker og favoritikoner vises på filmkortene. Tre tællere viser samlingens film, set og favoritter. Bundmenuen har lokale dekorative SVG-ikoner. Der er ingen nye runtime-afhængigheder eller eksterne scripts/skrifttyper.
-
-Ændrede designfiler: `index.html`, `src/styles.css`, `src/icons.js`, `src/ui.js`, `src/library-ui.js`, `src/editor-ui.js`, `src/settings-ui.js` og `public/manifest.webmanifest`. `tests/e2e/iphone.spec.js` kontrollerer desuden tællernes opdatering efter redigering samt mindst 44 × 44 px touchmål og ingen vandret rulning ved 320 px på alle tre sider. Data, backup, Worker, kamera og metadataflows anvender de eksisterende moduler.
-
-Faktiske afsluttende lokale resultater for designændringen (Node.js 24.19.0 / pnpm 11.19.0):
-
-```text
-pnpm test: Test Files 9 passed (9); Tests 178 passed (178)
-pnpm lint: exit 0; ingen lintfejl
-pnpm build: 247 modules transformed; built in 674ms
-Service worker 9a7f6e89921bd123: 10 lokale filer; ingen API-cache.
-pnpm test:e2e: 32 passed (20.6s)
-pnpm security: 65 filer + 45 git-commits kontrolleret; 0 secret-fund.
-Browser-build: ingen servernøgler eller direkte OpenAI-kald.
-Rekursiv rg-kontrol af dist: 0 fund (rg exit 1)
-```
-
-Browsertestene bruger WebKit og Chromium med mock-kamera/API. Den nye tællertest blev først verificeret rød mod den gamle brugerflade. Under første fulde kørsel ramte en labelvælger favoritmærket, før filmformularen var åbnet; testen bruger nu checkbox-rollen. Den afsluttende fulde kørsel bestod. Den lokale brugerflade er også gennemgået visuelt ved 390 px og på desktop. Eget iPhone-kamera og live AI-præcision er ikke verificeret af disse kontroller.
-
-Designet er committed lokalt som `2d95dc3` i den verificerede clone, og de 11 ændrede kilde-/dokumentationsfiler er kopieret til den oprindelige projektmappe og verificeret med SHA-256. Den efterfølgende sikkerhedskontrol omfattede 65 filer og 46 commits med 0 fund. GitHub-integrationen afviste oprettelse af designbranchen med HTTP 403, og browserforsøget oprettede heller ikke branchen. Designopdateringen er derfor endnu ikke udgivet til Pages; den tidligere funktionelle PWA er fortsat live. Den oprindelige projektmappes `.git` er skrivebeskyttet i dette miljø. Commit og patch er bevaret særskilt, så arbejdet kan udgives uden at rekonstruere ændringerne.
-
-Løsningen er implementeret på `feat/secure-iphone-pwa` i repositoryet `tobibeepdk/min-filmsamling` og merged til `main` i pull request #1. Den efterfølgende kameratestrettelse er merged i pull request #2. GitHub-kontrollen af #2 bestod med 178 unit-tests og 28 browsertests (`28 passed (33.8s)`), lint, build og sikkerhedskontrol.
-
-## Fund i den tidligere version
-
-Den gamle `index.html` samlede brugerflade, localStorage, metadataopslag, kamera og OCR. TMDB-token blev gemt i browserens indstillinger og kom med i backupen. Scanner og Tesseract blev hentet dynamisk, og OCR kunne ikke sikkert forstå stiliserede filmtitler. Ved opstart afregistrerede appen service workers og slettede caches. Repositoryet havde ingen reproducerbar build- eller testopsætning.
-
-Eksisterende mørkt tema, danske filmfelter og appikoner er genbrugt. Gamle kompilerede bundles og installationsvejledninger erstattes af kildemoduler og den danske opsætningsvejledning. Ingen brugerfilm eller kladder slettes som del af opdateringen.
+Worker og frontend bruger en fælles allowlist af ufølsomme fejlkoder. De skelner mellem provideradgang, kvote, throttling, timeout og et ufærdigt eller ugyldigt AI-svar. Rå providerbeskeder, credentials, tokens og fotoindhold returneres eller logges ikke. OpenAI-fejlindhold til kvoteklassifikation læses med en grænse på 8192 bytes. Kamera-/API-annullering afviser forældede svar.
 
 ## Arkitektur og ændrede filer
 
-Frontend bygges med Vite under `/min-filmsamling/`. Scannerbiblioteker bundles lokalt. IndexedDB indeholder `movies`, `drafts`, `barcodeMap`, `settings`, `coverBlobs` og `session`. Kladdesnapshots for nye film og redigeringer bevares særskilt. Annullering stopper igangværende operationer; sene svar anvendes ikke på nyere input.
+Frontend er fortsat en statisk Vite-PWA under `/min-filmsamling/`. Cloudflare Worker beskytter alle providerkald med kortlivede signerede sessioner, præcis Origin og en Durable Object med vedvarende globale, IP- og sessionsgrænser. IndexedDB indeholder `movies`, `drafts`, `barcodeMap`, `settings`, `coverBlobs` og `session`. Denne rettelse ændrer ingen databasestruktur, migrationshistorik, Worker-binding, providersecret eller forbrugsgrænse.
 
-Cloudflare Worker håndterer login, HMAC-sessioner, covergenkendelse i Responses API, stregkodeudbyder og TMDB. En SQLite-baseret Durable Object håndhæver fælles vedvarende grænser for session, IP og samlet dagsforbrug. Præcis Origin, MIME, requeststørrelse og providerdata valideres. Secrets ligger kun i Worker-konfigurationen. Produktionsmodellen vælges med `OPENAI_MODEL`; den aktuelle officielle modelunderstøttelse og kilder er dokumenteret i [opsætningsvejledningen](OPSÆTNING-DANSK.md).
-
-| Område | Filer |
+| Område | Ændrede filer |
 | --- | --- |
-| App og brugerflade | `index.html`, `src/app.js`, `src/ui.js`, `src/library-ui.js`, `src/editor-ui.js`, `src/settings-ui.js`, `src/dialogs.js`, `src/styles.css` |
-| Data og backup | `src/db.js`, `src/migration.js`, `src/backup.js` |
-| Kamera, identifikation og opslag | `src/camera.js`, `src/barcode.js`, `src/cover-ai.js`, `src/workflow.js`, `src/api.js`, `shared/barcode.js`, `shared/movie.js` |
-| PWA | `src/pwa.js`, `public/boot.js`, `public/service-worker.js`, `public/manifest.webmanifest`, tre genbrugte PNG-ikoner i `public/icons/`, `scripts/build-sw.mjs` |
-| Worker | `worker/src/index.js`, `http.js`, `security.js`, `limits.js`, `vision.js`, `providers.js`, `worker/wrangler.toml`, `worker/.dev.vars.example` |
-| Enhedstests | `tests/unit/barcode.test.js`, `camera.test.js`, `camera-zxing.test.js`, `flow.test.js`, `recognition.test.js`, `storage.test.js`, `api.test.js`, `worker.test.js`, `service-worker.test.js` |
-| Browsertests | `tests/e2e/iphone.spec.js`, `tests/e2e/regressions.spec.js`, `playwright.config.js` |
-| Build og kontrol | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `vite.config.js`, `eslint.config.js`, `.prettierrc.json`, `.gitignore`, `scripts/security-check.mjs` |
-| Deployment og dokumentation | `.github/workflows/pages.yml`, `.github/workflows/worker.yml`, `README.md`, `AGENTS.md`, `docs/OPSÆTNING-DANSK.md`, denne rapport |
+| Kamera og appflow | `src/dialogs.js`, `src/app.js` |
+| Sikre API-fejl | `src/api.js`, `shared/service-errors.js`, `worker/src/http.js`, `worker/src/vision.js` |
+| Regressionstests | `tests/unit/api.test.js`, `tests/unit/worker.test.js`, `tests/e2e/regressions.spec.js` |
+| Testport og API-mocks | `playwright.config.js`, `tests/e2e/iphone.spec.js` |
+| Dokumentation | `README.md`, `docs/OPSÆTNING-DANSK.md`, denne rapport |
 
 ## Faktiske kontrolresultater
 
-Kørt med Node.js `v24.19.0` og pnpm `11.19.0`. På grund af filer, som iCloud ikke kunne gøre læsbare, blev kontrollerne kørt i en lokal clone i `/private/tmp/min-filmsamling-local`. 71 kilde- og buildfiler er derefter kopieret tilbage til den oprindelige projektmappe og verificeret med SHA-256. Følgende er uddrag af konsoloutput fra den afsluttende kodeverifikation:
+Kontrollerne er kørt i `/private/tmp/min-filmsamling-final` med Node.js 24.19.0 og pnpm 11.19.0. Udgangspunktet er main-commit `9438020495ad9c7a82938d92b53b60208af68d6f`. De nye fejl blev først reproduceret med røde regressionstests og derefter verificeret grønne.
 
 ```text
-pnpm install --frozen-lockfile
-Already up to date
-Done in 459ms using pnpm v11.19.0
-
 pnpm test
-Test Files  9 passed (9)
-     Tests  178 passed (178)
-  Duration  1.11s
+Test Files  10 passed (10)
+     Tests  198 passed (198)
+  Duration  828ms
 
 pnpm lint
 $ eslint src shared worker/src scripts tests *.js --no-warn-ignored
 [exit 0; ingen lintfejl]
 
 pnpm build
-vite v7.3.6 building client environment for production...
-✓ 246 modules transformed.
-✓ built in 967ms
-Service worker 442cb6cec1eab610: 10 lokale filer; ingen API-cache.
+✓ 249 modules transformed.
+✓ built in 744ms
+Service worker c075f143f0f6e0e4: 10 lokale filer; ingen API-cache.
 
 pnpm security
-Sikkerhed: 64 filer + 42 git-commits kontrolleret; 0 secret-fund.
+Sikkerhed: 69 filer + 48 git-commits kontrolleret; 0 secret-fund.
 Browser-build: ingen servernøgler eller direkte OpenAI-kald.
 
-pnpm test:e2e
-Running 28 tests using 1 worker
-28 passed (28.3s)
+FILMSAMLING_TEST_PORT=4183 pnpm test:e2e
+Running 50 tests using 1 worker
+50 passed (28.1s)
 
-Rekursiv rg-kontrol af dist: 0 fund (rg exit 1)
-```
+Rekursiv rg-kontrol af dist: intet output, exit 1 (0 fund)
+git diff --check: intet output, exit 0
 
-Sikkerhedsscanningen ovenfor blev kørt efter testrettelsens commits og før denne deploymentopdatering. Den kontrollerer mønstre for credentials, serverkonfiguration i browser-buildet og eksisterende git-historik. Den rekursive `rg`-kontrol søgte efter OpenAI-, app-, signerings-, TMDB- og stregkodenøgler samt direkte OpenAI-endpoint i `dist`. En afsluttende historikscan køres også efter commits.
-
-Den første Pages-kørsel efter merge blev stoppet af en race i WebKit-testens mock: et automatisk kamerafund kunne lukke scanneren, mens testen trykkede på den manuelle reserveknap. Reserveforløbet afviser nu kameraadgang udtrykkeligt. En ny test kontrollerer afvist kameraadgang og videre covergenkendelse i begge browserprojekter. De to berørte tests blev desuden kørt tre gange i begge browsere: `12 passed (27.4s)`. Ingen timeout eller retry er hævet for at skjule fejlen.
-
-Vite viser en forventet advarsel om den separate klassiske `boot.js`. Filen kopieres fra `public` og skal kunne vise en fejlside, selv når appens modul ikke kan indlæses. Testen med blokerede modulfiler består i begge browsere. Projektet bruger JavaScript; ESLint anvendes, og der er ingen separat TypeScript-typekontrol.
-
-Wrangler har også bygget Worker med `--dry-run` (exit 0). Logstien blev placeret i `/private/tmp` i kontrolmiljøet:
-
-```text
-WRANGLER_LOG_PATH=/private/tmp/min-filmsamling-worker-final.log WRANGLER_SEND_METRICS=false pnpm exec wrangler deploy --config worker/wrangler.toml --dry-run --outdir /private/tmp/min-filmsamling-worker-final
-⛅️ wrangler 4.145.0
-Total Upload: 29.38 KiB / gzip: 9.29 KiB
+Worker-bundlekontrol med wrangler deploy --dry-run
+Total Upload: 32.31 KiB / gzip: 10.09 KiB
 --dry-run: exiting now.
+[exit 0]
 ```
 
-Dette er en lokal bundlekontrol, ikke en udgivelse.
+Port 4173 bruges i dette miljø af et andet projekt. Første browserforsøg blev derfor stoppet før testene kørte. Testporten kan vælges med `FILMSAMLING_TEST_PORT`; den afsluttende kørsel ovenfor anvendte port 4183. API-mocks tillader præcis testfrontendens origin. Produktions-CORS er fortsat præcis `https://tobibeepdk.github.io`.
 
-Worker er efterfølgende udgivet til Cloudflare med `pnpm worker:deploy` (exit 0). Wrangler oprettede `workers.dev`-adressen og bevarede den konfigurerede Durable Object-binding og migration:
+Vites advarsel om den separate klassiske `boot.js` er forventet. Filen kopieres fra `public` og viser en brugbar fejlside, hvis appens moduler mangler; den tilhørende test består. Der anvendes JavaScript og ESLint, ingen separat TypeScript-typekontrol.
 
-```text
-Total Upload: 29.38 KiB / gzip: 9.29 KiB
-Worker Startup Time: 1 ms
-Uploaded min-filmsamling-api (5.04 sec)
-Deployed min-filmsamling-api triggers (1.97 sec)
-https://min-filmsamling-api.min-filmsamling.workers.dev
-Current Version ID: 2555bd94-f547-43a3-b4df-b15530dfde0a
-```
+## Hvad der er verificeret
 
-Livekontrol uden providerkald: `GET /health` med produktionsorigin gav HTTP 200 og `{"ok":true}`; forkert origin gav HTTP 403 uden CORS-tilladelse; korrekt `OPTIONS /identify-cover` gav HTTP 204 med kun POST tilladt. `POST /session` gav HTTP 503 med den generiske opsætningsfejl, fordi de obligatoriske secrets endnu ikke er indtastet. Dette verificerer udgivelse, forbindelsen og CORS, men ikke login, AI eller metadata hos liveudbyderne.
+- EAN/UPC-kontrol, normalisering, lokal barcodeMap og automatisk ukendt stregkode → coverfoto.
+- Struktureret **The Wicked**-resultat med høj confidence udfylder filmen; lav confidence giver kandidatvalg og beskæring.
+- Et fejlet coverkald kan prøves igen med samme foto og uden manuel titelindtastning. Et forsinket genforsøg kan afbrydes med nyt foto.
+- Migration, backup, egne covers, noter, placering, favorit/set og kladder bevares; forsinkede svar overskriver ikke nyere input.
+- CORS, sessioner, MIME, requeststørrelse, persistent rate limiting og sikre providerfejl håndhæves.
+- Static-only service-worker-cache, offline filmvisning, GitHub Pages-base-path og fejlside ved manglende JavaScript.
 
-## Hvad testene verificerer
+Kamera, OpenAI, TMDB og stregkode-API er mocked i de automatiske tests. De 50 browsercases bruger iPhone 13-viewport i WebKit og Chromium. Der er ingen påstand om fysisk iPhone-kameraverifikation eller live AI-præcision.
 
-- Kontrolcifre og normalisering af EAN-13, EAN-8, UPC-A og tilsvarende nulpræfiksvarianter.
-- `7393834487707` uden databasefund åbner coverkameraet og ender med **The Wicked**, metadata og gemning uden titelindtastning. Gentagen scanning anvender lokal `barcodeMap` uden providerkald.
-- Høj confidence vælger automatisk; lav confidence giver store kandidatknapper, beskæring og nyt foto. Ugyldige AI-/providerdata afvises.
-- Migrering bevarer alle tidligere filmfelter, egne coverbytes, kladde, noter, placering, set/favorit og ikkehemmelige indstillinger. Fejl og konflikter giver rollback; gamle film og kladder bevares.
-- Backup allowlister filmfelter og egne covers; tokens, sessioner og settings udelades. Import validerer hele filen før atomisk merge og bevarer eksisterende film-ID'er og nyere noter.
-- Metadata og forsinkede svar overskriver ikke brugerens noter, placering eller eget cover. Navigation og annullering bevarer kladder, også mens lagring eller analyse er i gang.
-- Forkert Origin, ugyldig/udløbet session, for store billeder, ugyldig JSON/MIME og provider-rate limits håndteres sikkert. Durable Object-grænser overlever en genstart og er atomiske på tværs af sessioner/IP'er; oprydning følger Cloudflares 128-nøglers deletegrænse.
-- Service worker genbruger statiske filer offline, også med `Vary: Origin`, og cacher aldrig API-kald, adgangsheaders eller query-parametre.
+## Deployment og livegrænser
 
-Browsertestene kører med iPhone 13-viewport i WebKit og Chromium. Kamera og eksterne API'er er mocked. API-mocktests blokerer service workers, fordi Playwright ellers kan omgå routemocks; særskilte offlinetests anvender den rigtige service worker. Chromium bruger browserens offlinetilstand. WebKits runner afbrød navigation før service-worker-svar i den tilstand, så testen slukker en isoleret HTTP-testserver: ukachede forespørgsler fejler, en ny JavaScript-kontekst indlæses fra cache, og film/noter læses fra den rigtige IndexedDB. Testen accepterer ikke den gamle sides DOM som et vellykket reload.
+Pages udgives fra `main` efter GitHub Actions-checks. Worker udgives manuelt med `pnpm worker:deploy`; secrets, Durable Object-binding og migration `v1` bevares. En ny frontend-version aktiveres med appens opdateringsknap og bevarer IndexedDB-data. Se [den danske vejledning](OPSÆTNING-DANSK.md) for login, sikre secrets, fejlkoder og backup.
 
-## Deployment og egne secrets
+Workerens secret-navne `OPENAI_API_KEY`, `APP_ACCESS_KEY`, `SESSION_SIGNING_KEY` og `TMDB_READ_TOKEN` blev verificeret med `wrangler secret list`. Værdierne blev ikke læst. Dette bekræfter konfigurationens tilstedeværelse, ikke providerkontoens adgang eller saldo. Brugeren har selv opdateret og aktiveret APP-adgangsnøglen i Cloudflare.
 
-1. Følg [OPSÆTNING-DANSK.md](OPSÆTNING-DANSK.md): opret Cloudflare/OpenAI, og indtast `OPENAI_API_KEY`, `APP_ACCESS_KEY` og `SESSION_SIGNING_KEY` i Wranglers interaktive secret-prompts.
-2. Tilføj valgfrit `TMDB_READ_TOKEN` for de fulde filmoplysninger og eventuelt `BARCODE_PROVIDER_KEY`. Standard-stregkodeadapteren kan bruge UPCitemDB trial uden nøgle.
-3. Deploy Worker manuelt med `pnpm worker:deploy`; bevar Durable Object-binding og migration `v1`. Produktionsorigin er præcis `https://tobibeepdk.github.io`.
-4. Vælg GitHub Actions som Pages-source. Efter merge til `main` bygger og verificerer workflowen og udgiver `dist`.
-5. Appen har den udgivne Worker-adresse forudfyldt. Test forbindelsen, log ind, og installér i Safari via **Føj til hjemmeskærm**. En eksisterende tilpasset Worker-adresse bevares.
+Et separat, offentligt UPCitemDB-trialopslag for `7393834487707` gav HTTP 200, `code: OK` og ét produkt med titlen **National Treasure - Scandinavian Edition.** den 2. oktober. Det er et aktuelt databasefund, ikke testens mockede coverresultat **The Wicked**. Den automatiske test simulerer stadig et manglende fund for at verificere cover-reserven. Ingen OpenAI- eller TMDB-secrets blev brugt til dette offentlige opslag.
 
-Worker er udgivet, men ingen produktionssecrets er indtastet, og ingen liveprovider er kaldt. Fysisk iPhone-kamera, AI-præcision og brugerens model-/provideradgang kræver en efterfølgende liveprøve med egne secrets. Samlingen synkroniseres ikke mellem enheder. Data fra en anden origin, eksempelvis Netlify, flyttes med backup. Onlineomslag kræver netværk; egne gemte fotos kan vises offline.
+En vellykket `/health`-kontrol bekræfter forbindelse og Origin, men ikke en gyldig providerkonto. En live cover-/metadatafejl skal diagnosticeres ud fra den nye, ufølsomme fejlkode. Safari-webstedsdata og sikkerhedsindstillinger skal ikke slettes eller ændres som del af denne rettelse.
