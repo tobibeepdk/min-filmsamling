@@ -76,6 +76,8 @@ Genvejen bruger Wranglers skjulte prompts og tilbyder også det valgfrie TMDB-to
 
 Brug mindst 32 tegn til `SESSION_SIGNING_KEY`; brug også en lang tilfældig `APP_ACCESS_KEY`. `APP_ACCESS_KEY` er den adgangsnøgle, du senere bruger til login i appen. `SESSION_SIGNING_KEY` bruges kun på serveren til at signere sessioner.
 
+Hvis du ændrer adgangsnøglen i Cloudflare-dashboardet, betyder **Value encrypted**, at den gamle værdi er skjult. Indtast selv en ny værdi for `APP_ACCESS_KEY`. Efter **Save version** skal den nye version være aktiveret under **Deployments → Promote version**, før adgangskoden virker i appen. Log ind igen i appens indstillinger. Et login på iPhonen gælder kun i den browser; en anden enhed skal logge ind særskilt.
+
 Secrets skal blive i Cloudflares secret-lager. Indsæt dem aldrig i `wrangler.toml`, frontendkode, et `VITE_`-felt, en backup, et issue eller en commit. Kommandolinjen ovenfor indeholder kun secretens navn, så værdien ikke bliver et shell-argument.
 
 Worker bruger `gpt-6.1-sol` gennem Responses API med billedinput og et strict JSON-schema. Den officielle [modelbeskrivelse](https://developers.openai.com/api/docs/models/gpt-6.1-sol) angiver billedinput og Structured Outputs. Se også OpenAIs vejledninger om [Images and vision](https://developers.openai.com/api/docs/guides/images-vision) og [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs). Modelunderstøttelsen er kontrolleret 1. oktober 2026; din konto skal selv have modeladgang.
@@ -142,6 +144,8 @@ pnpm exec playwright install --with-deps chromium webkit
 pnpm test:e2e
 ```
 
+Hvis et andet projekt bruger port 4173, kør `FILMSAMLING_TEST_PORT=4183 pnpm test:e2e`. Preview-serveren bruger den valgte port og stopper ved en portkonflikt.
+
 Sikkerhedsscanningen kontrollerer kildekode, `dist` og git-historik med redigeret fejloutput. Workflowen uploader og deployer kun `dist` på `main`, efter at kontrollerne er bestået. Pull requests udgiver ikke en produktionsversion. Frontendens base-path er `/min-filmsamling/`.
 
 Der skal ingen OpenAI-, TMDB- eller appadgangsnøgler ind i Pages-workflowen.
@@ -203,6 +207,20 @@ Tests bruger mocks til OpenAI, TMDB, stregkodeudbyder og kamera. De kræver inge
 | HTTP 429 | Vent den angivne tid; kontrollér egne grænser og udbyderens kvote. |
 | Stregkoden har intet resultat | Prøv coverfoto eller manuel titel; alle filmudgaver findes ikke hos udbyderen. |
 | Kamera starter ikke | HTTPS, Safari-kameratilladelse og foto-/indtastningsreserven. |
+| Coveranalysen fejler | Fotoet vises fortsat. Tryk **Prøv analysen igen**, **Beskær titelområdet og prøv igen** eller **Tag nyt billede**. Annullering bevarer kladden. |
 | Gammel samling er ikke synlig | Samme origin og browserprofil, eller eksportér fra den gamle adresse og importér backupen. |
 
 Del fejlstatus og tidspunkt ved fejlfinding. Del ikke adgangsnøgler, session-token, foto-request bodies eller rå udbydersvar.
+
+Worker sender kun faste, ufølsomme fejlkoder. Appen angiver, om fejlen kom fra covergenkendelse, stregkodeopslag eller filmopslag. En metadatafejl bevarer den fundne titel, som stadig kan gemmes. Midlertidige AI-fotos bevares kun i hukommelsen, mens kameravinduet er åbent; de bliver ikke gemt i IndexedDB, localStorage eller backup.
+
+| Fejlkode | Næste trin |
+| --- | --- |
+| `PROVIDER_AUTH` | Kontrollér den pågældende tjenestes adgang i Worker. Et nyt app-login ændrer ikke OpenAI- eller TMDB-adgangen. |
+| `PROVIDER_ACCESS` | Kontrollér providerkontoens rettigheder og, ved covergenkendelse, adgang til modellen i `OPENAI_MODEL`. |
+| `PROVIDER_QUOTA` | Kontrollér [OpenAI-projektets forbrug og saldo](https://platform.openai.com/settings/organization/billing/overview). Nye forsøg hjælper først, når kvoten er tilgængelig igen. |
+| `PROVIDER_RATE_LIMIT` | Vent den angivne tid, før du prøver igen. |
+| `PROVIDER_TIMEOUT` / `PROVIDER_FAILURE` | Tjenesten svarede ikke i tide eller kunne ikke gennemføre kaldet. Prøv manuelt igen senere. |
+| `PROVIDER_REQUEST` / `PROVIDER_RESPONSE` | Kontrollér provideropsætningen. Del kun fejlkode, handling og tidspunkt til fejlfinding. |
+| `AI_INCOMPLETE` / `AI_INVALID_RESULT` | AI gav ikke et færdigt, valideret filmsvar. Prøv igen eller beskær titelområdet. Gentagne fejl kræver kontrol af modelopsætningen. |
+| `AI_REFUSED` | Tag et tydeligt foto af hele filmforsiden. |
