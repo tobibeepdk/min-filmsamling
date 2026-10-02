@@ -1,9 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
+const port = Number(process.env.FILMSAMLING_TEST_PORT || 4173);
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Ugyldig testport.');
+const baseURL = `http://127.0.0.1:${port}/min-filmsamling/`;
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,
   workers: 1,
-  use: { baseURL: 'http://127.0.0.1:4173/min-filmsamling/', trace: 'retain-on-failure' },
+  use: { baseURL, trace: 'retain-on-failure' },
   projects: [
     { name: 'iphone-webkit', use: { ...devices['iPhone 13'], browserName: 'webkit' } },
     {
@@ -12,8 +15,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm preview --port 4173',
-    url: 'http://127.0.0.1:4173/min-filmsamling/',
+    command: `pnpm preview --port ${port} --strictPort`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
   },
 });
