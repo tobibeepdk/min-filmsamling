@@ -106,16 +106,22 @@ export async function openCoverCamera({
   const controller = new AbortController();
   let stream,
     attempt = 0,
-    captured = false;
+    captured = false,
+    lastBlob,
+    previewUrl;
   const video = el('video', { playsinline: '', muted: '', 'aria-label': 'Coverkamera' });
+  video.muted = true;
+  const cameraView = el('div', { class: 'camera-view' }, video);
   const help = el('p', {}, 'Starter bagkameraet…');
   const capture = button(
     'Tag billede',
     async () => {
-      if (!video.videoWidth) {
+      if (!stream || !video.videoWidth || controller.signal.aborted) {
         help.textContent = 'Kameraet er ikke klar. Brug fotoknappen nedenfor.';
         return;
       }
+      const shotAttempt = attempt;
+      capture.disabled = true;
       const canvas = document.createElement('canvas');
       const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
       canvas.width = Math.round(video.videoWidth * scale);
@@ -124,9 +130,29 @@ export async function openCoverCamera({
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
       canvas.width = 0;
       canvas.height = 0;
+      if (controller.signal.aborted || shotAttempt !== attempt) return;
       if (blob) await use(blob);
+      else {
+        capture.disabled = false;
+        help.textContent = 'Billedet kunne ikke tages. Prøv igen eller vælg et foto nedenfor.';
+      }
     },
-    { class: 'primary' },
+    { class: 'primary', disabled: '' },
+  );
+  const retry = button(
+    own ? 'Prøv at gemme fotoet igen' : 'Prøv analysen igen',
+    () => {
+      if (lastBlob && !controller.signal.aborted) {
+        onStart();
+        submit(lastBlob, ++attempt);
+      }
+    },
+    { class: 'primary', hidden: '' },
+  );
+  const crop = button(
+    'Beskær titelområdet og prøv igen',
+    () => lastBlob && openCrop(lastBlob, onBlob, onCancel, onStart),
+    { hidden: '' },
   );
   const photo = el('input', {
     type: 'file',
@@ -144,40 +170,72 @@ export async function openCoverCamera({
     stream = null;
     video.pause();
     video.srcObject = null;
+    capture.disabled = true;
+    capture.hidden = true;
+    cameraView.hidden = !previewUrl;
+  }
+  function showRetry() {
+    retry.hidden = !lastBlob;
+    crop.hidden = own || !lastBlob;
+  }
+  async function submit(blob, ownAttempt) {
+    retry.hidden = true;
+    crop.hidden = true;
+    help.replaceChildren(
+      el('span', { class: 'spinner' }),
+      own ? 'Gemmer dit coverfoto…' : 'Uploader coveret og analyserer filmen…',
+    );
+    try {
+      await onBlob(blob, {
+        retry: () => openCoverCamera({ message, onBlob, onCancel, own, onStart }),
+        crop: () => openCrop(blob, onBlob, onCancel, onStart),
+      });
+    } catch (error) {
+      if (!controller.signal.aborted && ownAttempt === attempt && error.name !== 'AbortError') {
+        help.textContent = error.message;
+        showRetry();
+      }
+    }
   }
   async function use(chosen) {
+    if (controller.signal.aborted) return;
     const ownAttempt = ++attempt;
     captured = true;
     onStart();
     capture.disabled = true;
+    retry.hidden = true;
+    crop.hidden = true;
     help.textContent = 'Klargør og komprimerer billedet…';
     try {
       const blob = await compressImage(chosen);
       if (controller.signal.aborted || ownAttempt !== attempt) return;
+      lastBlob = blob;
       stop();
-      help.replaceChildren(
-        el('span', { class: 'spinner' }),
-        own ? 'Gemmer dit coverfoto…' : 'Uploader coveret og analyserer filmen…',
-      );
-      await onBlob(blob, {
-        retry: () => openCoverCamera({ message, onBlob, onCancel, own, onStart }),
-        crop: () => openCrop(chosen, onBlob, onCancel, onStart),
-      });
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = URL.createObjectURL(blob);
+      cameraView.replaceChildren(el('img', { src: previewUrl, alt: 'Dit coverfoto' }));
+      cameraView.hidden = false;
+      await submit(blob, ownAttempt);
     } catch (error) {
-      if (!controller.signal.aborted && ownAttempt === attempt) help.textContent = error.message;
+      if (!controller.signal.aborted && ownAttempt === attempt) {
+        help.textContent = error.message;
+        showRetry();
+      }
     } finally {
-      if (ownAttempt === attempt) capture.disabled = false;
+      if (!controller.signal.aborted && ownAttempt === attempt) capture.disabled = !stream;
     }
   }
   showSheet(
     own ? 'Eget coverfoto' : 'Find film fra cover',
     el('p', {}, message),
-    el('div', { class: 'camera-view' }, video),
+    cameraView,
     help,
     el(
       'div',
       { class: 'actions' },
       capture,
+      retry,
+      crop,
       button('Tag nyt billede', () => openCoverCamera({ message, onBlob, onCancel, own, onStart })),
       button('Annuller – behold kladden', () => {
         closeModal();
@@ -189,6 +247,9 @@ export async function openCoverCamera({
   cleanup = () => {
     controller.abort();
     stop();
+    lastBlob = undefined;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = undefined;
   };
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -201,10 +262,15 @@ export async function openCoverCamera({
     }
     video.srcObject = stream;
     await video.play();
+    if (controller.signal.aborted || captured) return;
+    capture.disabled = false;
     help.textContent = 'Hold hele forsiden roligt i billedet.';
   } catch {
-    if (!controller.signal.aborted)
+    stop();
+    if (!controller.signal.aborted && !captured) {
+      cameraView.hidden = true;
       help.textContent = 'Brug fotoknappen nedenfor, hvis livekameraet ikke starter.';
+    }
   }
 }
 export async function openCrop(file, onBlob, onCancel, onStart = () => {}) {
