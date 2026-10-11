@@ -33,6 +33,9 @@ importers:
       globals:
         specifier: 16.5.0
         version: 16.5.0
+      miniflare:
+        specifier: 5.20260930.0-alpha
+        version: 5.20260930.0-alpha
       prettier:
         specifier: 3.9.9
         version: 3.9.9

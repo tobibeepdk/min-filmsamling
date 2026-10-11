@@ -1,5 +1,10 @@
 # Arbejde i repositoryet
 
+## Tidligere fejl
+
+- Slå relevante symptomer op i `docs/fejl-og-loesninger.md` før nye forsøg. Gem nye erfaringer med årsag, afprøvet løsning, sikkerhed, forebyggelse og konkret bevis.
+- Skeln mellem produktionsfejl, testværktøjsfejl og miljøproblemer. Providertransport skal testes i Workers-runtime; et Node-mock eller `/health` beviser ikke et fungerende providerkald.
+
 ## Arkitektur og værktøjer
 
 - Brug Node.js 24 og pnpm 11.19.0; installér med `pnpm install --frozen-lockfile`.
@@ -13,6 +18,7 @@
 - Appens adgangsnøgle må kun bruges til login; gem kun kortlivet token og udløbstid i `session`-store.
 - Bevar præcis Origin-validering, autentificering, requeststørrelsesgrænser, upstream-validering og persistent global rate limiting. Produktionsorigin er `https://tobibeepdk.github.io`, uden sti eller afsluttende skråstreg.
 - Log ikke request bodies, billeder, session-token eller rå providerfejl. Sikkerhedsfejl skal have redigeret output.
+- Providerkald bruger `redirect: 'manual'` og afviser omdirigeringer som fejl. Følg aldrig en providerredirect med credentials.
 - Brug mocks til automatiske API- og kameratests. Bed ikke om API-nøgler for at implementere eller teste koden. Ægte secrets indtastes af brugeren i Wranglers interaktive secret-prompts.
 - Worker udgives manuelt; en pull request må ikke udløse Worker-deploy.
 
