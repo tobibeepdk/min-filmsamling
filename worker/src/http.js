@@ -99,7 +99,9 @@ export async function upstreamJson(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
-    const result = await fetch(url, { ...options, redirect: 'error', signal: controller.signal });
+    // Workers requires manual handling; non-2xx responses below reject redirects
+    // without forwarding provider credentials to another address.
+    const result = await fetch(url, { ...options, redirect: 'manual', signal: controller.signal });
     if (result.status === 404 && notFoundIsMiss) {
       if (result.body) await result.body.cancel();
       return { found: false, code: 'OK', items: [] };
