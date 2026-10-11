@@ -1,4 +1,55 @@
-# Implementering og verifikation – 2. oktober 2026
+# Implementering og verifikation
+
+## Scanningsrettelse – 7. oktober 2026
+
+Stregkodeopslaget fejlede før providerkontakt, fordi Workers-runtime afviste `redirect: 'error'` i det fælles API-kald. `worker/src/http.js` bruger nu `redirect: 'manual'` og afviser stadig alle omdirigeringer, så credentials ikke sendes videre. Barcode, TMDB og AI bruger samme helper. Der er ingen ændring i frontendens filmdata, kamera, IndexedDB, secrets, Durable Object-bindinger eller migrationshistorik. Den statiske PWA beholder `/min-filmsamling/` og samme service-worker-version.
+
+Ændrede filer: `worker/src/http.js`, `package.json`, `pnpm-lock.yaml`, `tests/fixtures/upstream-worker.js`, `tests/unit/worker-runtime.test.js`, `AGENTS.md`, `README.md`, `docs/OPSÆTNING-DANSK.md`, `docs/fejl-og-loesninger.md` og denne rapport. Miniflare er nu en eksplicit, pinnet testafhængighed med samme version som Wranglers eksisterende dependency. Der er ingen ny produktionsafhængighed.
+
+Kontrollerne er kørt i `/private/tmp/min-filmsamling-scan-fix` med Node.js 24.19.0 og pnpm 11.19.0, baseret på main `085ed11da52a4996e6a2ac5cca8820426a59d0a9`. De to nye tests blev først kørt røde mod den uændrede adapter: forventet 200, modtaget 502, og ingen outbound-kald. Efter rettelsen består de i workerd med kun providerens svar mocked.
+
+```text
+pnpm test
+Test Files  11 passed (11)
+     Tests  200 passed (200)
+  Duration  2.93s
+
+pnpm lint
+$ eslint src shared worker/src scripts tests *.js --no-warn-ignored
+[exit 0; ingen lintfejl]
+
+pnpm build
+✓ 249 modules transformed.
+✓ built in 1.03s
+Service worker c075f143f0f6e0e4: 10 lokale filer; ingen API-cache.
+
+pnpm security
+Sikkerhed: 72 filer + 63 git-commits kontrolleret; 0 secret-fund.
+Browser-build: ingen servernøgler eller direkte OpenAI-kald.
+
+FILMSAMLING_TEST_PORT=4183 pnpm test:e2e
+Running 50 tests using 1 worker
+50 passed (2.7m)
+test-results/.last-run.json: status passed, failedTests []
+
+rg --files-with-matches --hidden \
+  'OPENAI_API_KEY|APP_ACCESS_KEY|SESSION_SIGNING_KEY|TMDB_READ_TOKEN|BARCODE_PROVIDER_KEY|sk-(proj-)?[A-Za-z0-9_-]{20,}|api\.openai\.com' dist
+[intet output; exit 1; 0 fund]
+
+git diff --check
+[intet output; exit 0]
+
+wrangler deploy --dry-run --config worker/wrangler.toml
+Total Upload: 32.31 KiB / gzip: 10.09 KiB
+--dry-run: exiting now.
+[exit 0]
+```
+
+En midlertidig Cloudflare remote-preview indlæste den rettede `lookupBarcode` og slog `7393834487707` op i UPCitemDBs offentlige trial-database. Faktisk svar: `{ "probe": "manual-v1", "found": true, "title": "National Treasure - Scandinavian Edition." }`. Ingen app-secrets eller produktionsbindinger blev brugt, og previewen gemte ingen brugerfilm. Resultatet **The Wicked** testes separat som et struktureret, mocked AI-svar, når stregkoden ikke findes.
+
+De automatiske browsertests bekræfter kendt og ukendt stregkode, AI-kandidatvalg, cover-genforsøg, noter og kladder med iPhone-viewport i WebKit og Chromium. De dokumenterer ikke fysisk kamerafunktion eller live AI-/TMDB-kontoens adgang. En preview er ikke et produktionsdeploy; Worker udgives særskilt efter kodekontrol. Se [fejl og løsninger](fejl-og-loesninger.md) for årsag, sikkerhed og forebyggelse.
+
+## Tidligere implementering – 2. oktober 2026
 
 ## Rettelse af cover- og opslagfejl
 

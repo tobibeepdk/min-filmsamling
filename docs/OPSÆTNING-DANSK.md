@@ -212,6 +212,8 @@ Tests bruger mocks til OpenAI, TMDB, stregkodeudbyder og kamera. De kræver inge
 
 Del fejlstatus og tidspunkt ved fejlfinding. Del ikke adgangsnøgler, session-token, foto-request bodies eller rå udbydersvar.
 
+Hvis alle provideropslag straks giver `PROVIDER_FAILURE`, mens **Test forbindelse** er grøn, skal Workerens kodeversion kontrolleres. Rettelsen fra 7. oktober bruger `redirect: 'manual'` og afviser omdirigeringer sikkert. Den tidligere `redirect: 'error'` blev afvist af den anvendte Workers-runtime, før databasen blev kontaktet. Deploy den rettede Worker med `pnpm worker:deploy`; et nyt app-login eller en frontendopdatering alene ændrer ikke serverkoden. Se [fejl og løsninger](fejl-og-loesninger.md). Safari-data og Nedlukningstilstand skal bevares.
+
 Worker sender kun faste, ufølsomme fejlkoder. Appen angiver, om fejlen kom fra covergenkendelse, stregkodeopslag eller filmopslag. En metadatafejl bevarer den fundne titel, som stadig kan gemmes. Midlertidige AI-fotos bevares kun i hukommelsen, mens kameravinduet er åbent; de bliver ikke gemt i IndexedDB, localStorage eller backup.
 
 | Fejlkode | Næste trin |
