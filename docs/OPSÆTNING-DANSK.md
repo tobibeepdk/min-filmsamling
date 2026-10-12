@@ -92,6 +92,8 @@ pnpm exec wrangler secret put TMDB_READ_TOKEN --config worker/wrangler.toml
 
 Uden dette token kan du stadig registrere film manuelt og bruge covergenkendelse, når OpenAI og login er konfigureret. Appen viser, at TMDB-opslag mangler opsætning.
 
+Appens **Indstillinger → Om appen** krediterer TMDB med et godkendt logo, et link til TMDB og den krævede tekst: “This product uses the TMDB API but is not endorsed or certified by TMDB.” Se TMDBs [attributionkrav](https://developer.themoviedb.org/docs/faq) og [godkendte logoer](https://www.themoviedb.org/about/logos-attribution). Det lokale `public/tmdb-logo.svg` er den uændrede **Alt short (blue)**-variant fra TMDBs officielle logoside. Logoet bruger appens `/min-filmsamling/`-basesti og medtages i det almindelige build og den statiske offlinecache.
+
 ### Valgfrit: stregkodeudbyder
 
 Standardværdien `BARCODE_PROVIDER = "upcitemdb"` bruger UPCitemDBs trial-endpoint uden en udbydernøgle. En betalt UPCitemDB-nøgle aktiverer den tilsvarende `v1`-adgang:

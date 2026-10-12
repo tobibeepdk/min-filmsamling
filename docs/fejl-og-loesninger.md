@@ -1,5 +1,19 @@
 # Fejl og afprøvede løsninger
 
+## 12. oktober 2026: kendt stregkode findes, men filmoplysninger mangler
+
+**Symptom:** EAN `7393834487707` findes hos UPCitemDB som `National Treasure - Scandinavian Edition.`, men det efterfølgende TMDB-opslag finder ingen yderligere filmdata. En tidligere `PROVIDER_AUTH` skyldtes en separat TMDB-credentialfejl; denne forsvandt efter ejerens sikre tokenopsætning.
+
+**Årsag og sikkerhed:** Den eksisterende produkttitelrensning kendte ikke den regionale udgaveangivelse og dens afsluttende punktum. TMDB søgte derfor efter produktnavnet. Ændringen berører kun kendte produktangivelser i forespørgsler; den ændrer ingen secrets, sessiongrænser, film-ID'er, noter, placeringer eller egne covers.
+
+**Afprøvet løsning:** Den fælles `shared/product-title.js` bruges både ved stregkodeopslag og ved TMDB-søgning fra ældre kladder. `Scandinavian Edition` fjernes kun som afsluttende angivelse efter en tydelig separator eller i parentes/bracket. Ukendte udgaver, tvetydig titeltekst og årstal bevares.
+
+**Bevis:** I den udgivne app med ejerens nye login gav den rå produkttitel ingen TMDB-kandidater. En kontrolleret ændring af kun titlen til `National Treasure` fandt automatisk originaltitel og år `2004` med datakilden `tmdb`. Dette var en live diagnose af titelproblemet, ikke en genprøve af den endnu ikke udgivne kodeændring. De nye adapterregressioner havde 12 forventede assertion-fejl før rettelsen; efter rettelsen består 69 adaptertests og de to eksisterende workerd-tests med mocked providertransport. Samlet verifikation og efterfølgende deployment dokumenteres særskilt.
+
+**Forebyggelse:** Bevar regressionerne for den faktiske UPCitemDB-produkttekst, gamle kladder, årstal og titler med ordet Edition. Sondr mellem vellykket login, aktiveret Worker-secret, live filmopslag og et fuldt gennemspillet scannerforløb. `/health` dokumenterer kun forbindelsen. Login på en iPhone overføres ikke til en anden browser.
+
+**Testmiljø:** Det første workerd-testforsøg stoppede før assertions med lokal `listen EPERM`. Testen bestod med tilladelse til en lokal testserver; dette var ikke en produktionsfejl. Offlineinstallation manglede pnpm-registrymetadata for Miniflare, mens den efterfølgende frosne installation genbrugte de låste pakker. Projektets pnpm 11.19.0 anvendes til de afsluttende checks.
+
 ## 7. oktober 2026: stregkodeopslag fejler straks i Workers-runtime
 
 **Symptom:** Appens coverkamera åbner efter scanning med `Stregkodeopslag` og `PROVIDER_FAILURE`. `/health` kan samtidig svare korrekt. Problemet ligger før AI-genkendelsen.
