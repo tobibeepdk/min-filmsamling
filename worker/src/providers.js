@@ -1,26 +1,8 @@
 import { barcodeVariants, normalizeBarcode } from '../../shared/barcode.js';
+import { movieProductTitle } from '../../shared/product-title.js';
 import { HttpError, onlyFields, upstreamJson } from './http.js';
 const text = (value, maximum = 300) =>
   typeof value === 'string' ? value.trim().slice(0, maximum) : '';
-const physicalEdition =
-  /\b(?:4k|uhd|ultra[ -]*hd|blu[ -]?ray|dvd|steelbook|(?:collector['’]?s?|special|limited|ultimate|anniversary|extended|deluxe)\s+edition|\d+[ -]*discs?|region\s*[a-c0-9])\b/i;
-const physicalSuffix =
-  /\s+(?:[-–—:]\s*)?(?:4k|uhd|ultra[ -]*hd|blu[ -]?ray|dvd|steelbook|(?:collector['’]?s?|special|limited|ultimate|anniversary|extended|deluxe)\s+edition|\d+[ -]*discs?|region\s*[a-c0-9])\s*$/i;
-function movieProductTitle(raw) {
-  // Only physical-product annotations are removed; years remain part of movie names.
-  let title = raw
-    .replace(/\s*(?:\(([^()]*)\)|\[([^[\]]*)\])/g, (annotation, round, square) =>
-      physicalEdition.test(round ?? square) ? '' : annotation,
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
-  for (let count = 0; count < 10; count++) {
-    const next = title.replace(physicalSuffix, '');
-    if (next === title) break;
-    title = next.replace(/\s+[-–—+,&/]\s*$/, '').trim();
-  }
-  return title || raw;
-}
 function movieProductFormat(edition) {
   if (/\b(?:4k|uhd|ultra[ -]*hd)\b/i.test(edition)) return '4K UHD';
   if (/\b(?:blu[ -]?ray|bd)\b/i.test(edition)) return 'Blu-ray';
@@ -195,8 +177,8 @@ export async function searchMovie(body, env) {
   )
     throw new HttpError(400);
   const query = {
-    title: text(body.title),
-    originalTitle: text(body.originalTitle),
+    title: movieProductTitle(text(body.title)),
+    originalTitle: movieProductTitle(text(body.originalTitle)),
     year: body.year || null,
   };
   if (!query.title && !query.originalTitle) throw new HttpError(400);
