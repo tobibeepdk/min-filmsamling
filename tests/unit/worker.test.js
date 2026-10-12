@@ -722,6 +722,106 @@ describe('Metadata and barcode adapters', () => {
     });
     expect(result.selected.score).toBeGreaterThan(result.candidates[1].score);
   });
+  test('TMDB finds and ranks a movie from a legacy draft with a regional edition suffix', async () => {
+    const { env } = environment({ TMDB_READ_TOKEN: 'test-only-tmdb' });
+    const token = await login(env);
+    const queries = [];
+    const movie = {
+      id: 1,
+      title: 'National Treasure',
+      original_title: 'National Treasure',
+      release_date: '2004-01-01',
+      overview: 'A treasure hunt.',
+      poster_path: '/treasure.jpg',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        const parsed = new URL(url);
+        if (parsed.pathname === '/3/search/movie') {
+          const title = parsed.searchParams.get('query');
+          queries.push(title);
+          const results = title === 'National Treasure' ? [movie] : [];
+          return json({ page: 1, total_pages: 1, total_results: results.length, results });
+        }
+        if (parsed.pathname === '/3/movie/1')
+          return json({
+            ...movie,
+            runtime: 131,
+            genres: [{ id: 12, name: 'Eventyr' }],
+            credits: { crew: [], cast: [] },
+          });
+        throw new Error('Unexpected provider path');
+      }),
+    );
+    const draft = {
+      title: 'National Treasure - Scandinavian Edition.',
+      originalTitle: 'National Treasure [Scandinavian Edition].',
+      year: 2004,
+    };
+    const response = await worker.fetch(request('/search-movie', draft, token), env);
+    const result = await response.json();
+    expect(response.status).toBe(200);
+    expect(result.selected).toMatchObject({
+      title: 'National Treasure',
+      originalTitle: 'National Treasure',
+      year: 2004,
+      score: 1,
+      source: 'tmdb',
+    });
+    expect(queries).toEqual(['National Treasure']);
+    expect(draft).toEqual({
+      title: 'National Treasure - Scandinavian Edition.',
+      originalTitle: 'National Treasure [Scandinavian Edition].',
+      year: 2004,
+    });
+  });
+  test('trial barcode lookup removes the known Scandinavian product edition from movie identity', async () => {
+    const { env } = environment();
+    const token = await login(env);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        json({
+          code: 'OK',
+          total: 1,
+          offset: 0,
+          items: [
+            {
+              ean: '7393834487707',
+              title: 'National Treasure - Scandinavian Edition.',
+              description: '',
+              elid: '293064045692',
+              brand: '',
+              model: '',
+              color: '',
+              size: '',
+              dimension: '',
+              weight: '',
+              category: 'Electronics > Video > Video Players & Recorders > DVD & Blu-ray Players',
+              lowest_recorded_price: 6.2,
+              highest_recorded_price: 6.2,
+              images: [],
+              offers: [],
+            },
+          ],
+        }),
+      ),
+    );
+    const response = await worker.fetch(
+      request('/lookup-barcode', { barcode: '7393834487707' }, token),
+      env,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      found: true,
+      title: 'National Treasure',
+      description: '',
+      format: '',
+      images: [],
+      source: 'upcitemdb',
+    });
+  });
   test('trial barcode lookup normalizes query, preserves description, filters images, handles misses', async () => {
     const { env } = environment();
     const token = await login(env);
@@ -890,6 +990,40 @@ describe('Metadata and barcode adapters', () => {
     ['Blade Runner 2049 [4K UHD + Blu-ray]', 'Blade Runner 2049', '4K UHD'],
     ['2001: A Space Odyssey (DVD)', '2001: A Space Odyssey', 'DVD'],
     ['The Collector', 'The Collector', ''],
+    ['National Treasure – Scandinavian Edition', 'National Treasure', ''],
+    ['National Treasure—Scandinavian Edition.', 'National Treasure', ''],
+    ['National Treasure: Scandinavian Edition.', 'National Treasure', ''],
+    ['National Treasure (Scandinavian Edition).', 'National Treasure', ''],
+    ['Blade Runner 2049 [Scandinavian Edition]', 'Blade Runner 2049', ''],
+    ['2001: A Space Odyssey - Scandinavian Edition.', '2001: A Space Odyssey', ''],
+    ['National Treasure - Scandinavian Edition. Blu-ray', 'National Treasure', 'Blu-ray'],
+    ['National Treasure - Scandinavian Edition. (Blu-ray)', 'National Treasure', 'Blu-ray'],
+    ['National Treasure (Scandinavian Edition) DVD', 'National Treasure', 'DVD'],
+    ['National Treasure (2004) - Scandinavian Edition.', 'National Treasure (2004)', ''],
+    ['Scandinavian Edition', 'Scandinavian Edition', ''],
+    ['The Scandinavian Edition', 'The Scandinavian Edition', ''],
+    ['National Treasure Scandinavian Edition.', 'National Treasure Scandinavian Edition.', ''],
+    [
+      'National Treasure - International Edition.',
+      'National Treasure - International Edition.',
+      '',
+    ],
+    [
+      'National Treasure [Scandinavian Edition Redux]',
+      'National Treasure [Scandinavian Edition Redux]',
+      '',
+    ],
+    [
+      'National Treasure - Scandinavian Edition. Part II',
+      'National Treasure - Scandinavian Edition. Part II',
+      '',
+    ],
+    [
+      'National Treasure (Scandinavian Edition) Returns',
+      'National Treasure (Scandinavian Edition) Returns',
+      '',
+    ],
+    ['(Scandinavian Edition)', '(Scandinavian Edition)', ''],
   ])('separates physical edition from film identity: %s', async (raw, title, format) => {
     const { env } = environment();
     const token = await login(env);
