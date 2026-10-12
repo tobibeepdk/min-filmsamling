@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "project": "tobibeepdk/min-filmsamling",
+  "updated": "2026-10-12",
+  "verifiedMain": "e95c678d9ad39c392996081484550fc0e9d00077",
+  "costConstraint": "Ingen køb af API-kredit eller yderligere betalte OpenAI-forsøg uden nyt udtrykkeligt ønske.",
+  "statusLabels": {
+    "uafklaret": "Årsag uafklaret",
+    "mocktestet": "Implementeret og mocktestet",
+    "liveverificeret": "Løst og liveverificeret",
+    "blokeret": "Fortsat blokeret",
+    "testdaekket": "Forebyggelse og testdækning",
+    "loest": "Løst",
+    "haandteret": "Håndteret"
+  },
+  "entries": [
+    {
+      "id": "F01",
+      "title": "Appen starter ikke: indexedDB mangler",
+      "category": "produktion",
+      "status": "uafklaret",
+      "symptom": "iPhone viste “Can’t find variable: indexedDB” samtidig med Nedlukningstilstand.",
+      "cause": "Den konkrete årsag og en bestemt kodeændring er ikke dokumenteret. Samtidig Nedlukningstilstand beviser ikke årsagen.",
+      "solution": "Brugeren meldte senere, at appen virkede. Ved gentagelse: undersøg API-tilgængelighed, Safari-/iOS-version, origin og appversion på samme enhed før en ændring.",
+      "prevention": "Bevar Nedlukningstilstand og Safari-data. Lov ikke en implementeret lagerreserve: den verificerede db.js bruger IndexedDB og indeholder ikke en dokumenteret localStorage-reserve.",
+      "evidence": "Brugerens skærmbillede og beskeden “virker nu”; kildeinspektion af db.js fra main e95c678d. Ingen separat fysisk regression af denne fejl.",
+      "safety": "Ingen sletning af samling eller nedjustering af browserbeskyttelse.",
+      "sources": [
+        "Brugerens fejlskærmbillede og efterfølgende besked",
+        "src/db.js"
+      ]
+    },
+    {
+      "id": "F02",
+      "title": "OCR læser stiliseret covertekst forkert",
+      "category": "produktion",
+      "status": "mocktestet",
+      "symptom": "Tidligere OCR gav meningsløs tekst for coveret The Wicked.",
+      "cause": "OCR alene kan miste titel, layout, grafik og øvrige coverledetråde.",
+      "solution": "Hele det roterede, omtegnede og komprimerede cover sendes gennem Worker til billedforståelse i Responses API. Struktureret JSON og confidence styrer automatisk valg eller højst fem kandidater.",
+      "prevention": "Bevar billedinput, EXIF-behandling, faste JSON-krav og kandidatvalg. Kontrollér modelstøtte i officiel dokumentation, hvis OPENAI_MODEL ændres.",
+      "evidence": "Automatiske tests håndterer The Wicked, år 2013, høj/lav confidence og ukendt stregkode. Live AI blev afvist med 429; genkendelsespræcision er ikke liveverificeret.",
+      "safety": "Send ikke originalfilen. Midlertidigt AI-foto må ikke gemmes i localStorage, backup eller logs.",
+      "sources": [
+        "min-filmsamling-levering.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F03",
+      "title": "Ukendt stregkode giver ingen filmtitel",
+      "category": "produktion",
+      "status": "mocktestet",
+      "symptom": "En gyldig EAN/UPC kan mangle i den eksterne database eller ramme providerens grænse.",
+      "cause": "Stregkodedatabaser har ufuldstændig dækning; fravær af fund er ikke en ugyldig kode.",
+      "solution": "Kontrollér kontrolciffer og normalisering, derefter lokal barcodeMap, derefter provider. Et manglende fund går videre til coverkamera; gem den lokale kobling, når filmen gemmes.",
+      "prevention": "Test missing-result, providerfejl og lokal genbrug særskilt. EAN 7393834487707 findes nu live som National Treasure; brug et mocked missing-result til regressionen for ukendt kode.",
+      "evidence": "52 afsluttende mockede browsertests inkluderer ukendt kode til coverflow og gemning samt kendt kode til metadata og lokal genbrug. Nummeropslag for 7393834487707 er liveverificeret.",
+      "safety": "Opfind ingen titel. Automatisk coveridentifikation for ukendte koder kræver fungerende AI-adgang, som aktuelt er blokeret.",
+      "sources": [
+        "min-filmsamling-scan-slutrapport-2026-10-11.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F04",
+      "title": "Providerkald fejler straks, men health er grøn",
+      "category": "produktion",
+      "status": "liveverificeret",
+      "symptom": "Stregkodeopslag gav PROVIDER_FAILURE, mens Test forbindelse eller /health svarede OK.",
+      "cause": "redirect: error blev afvist af den anvendte Workers-runtime, før providerkontakt. Node-mocks skjulte forskellen.",
+      "solution": "Brug redirect: manual i den fælles upstreamJson, og afvis alle redirects uden at følge dem med credentials. Deploy selve Worker-rettelsen.",
+      "prevention": "Test den faktiske adapter i workerd ved transportændringer. En frontendopdatering eller et nyt login ændrer ikke Workerens serverkode.",
+      "evidence": "To workerd-regressioner fejlede før rettelsen og bestod efter. Secretfri Cloudflare-preview fandt faktisk EAN 7393834487707. PR #5 blev udgivet fra main 37688e35.",
+      "safety": "Følg aldrig en providerredirect med Authorization. Udskriv ikke rå upstream-fejl.",
+      "sources": [
+        "min-filmsamling-scan-slutrapport-2026-10-11.md",
+        "PR #5"
+      ]
+    },
+    {
+      "id": "F05",
+      "title": "Barcode-titel findes, men TMDB finder ingen metadata",
+      "category": "produktion",
+      "status": "liveverificeret",
+      "symptom": "UPCitemDB returnerede National Treasure - Scandinavian Edition., hvorefter TMDB gav ingen filmdata.",
+      "cause": "Det regionale udgavesuffiks og punktummet blev søgt som en del af filmtitlen.",
+      "solution": "shared/product-title.js renser kendte produktangivelser både ved stregkodeopslag og ved søgning fra gamle kladder, også originalTitle.",
+      "prevention": "Fjern kun en kendt afsluttende udgaveangivelse efter tydelig separator eller i parentes/bracket. Bevar årstal, tvetydig tekst og ukendte udgaver.",
+      "evidence": "Efter PR #6 gav appens nummerreserve automatisk National Treasure (2004), TMDB-metadata og cover uden titelindtastning. Fysisk kamera blev ikke prøvet; ingen testfilm blev gemt.",
+      "safety": "Rens søgefelter uden at overskrive egne noter, placering eller coverfoto.",
+      "sources": [
+        "min-filmsamling-slutrapport-20261012.md",
+        "PR #6"
+      ]
+    },
+    {
+      "id": "F06",
+      "title": "Sort kamerafelt eller mistet cover efter fejl",
+      "category": "produktion",
+      "status": "mocktestet",
+      "symptom": "Et stoppet/utilgængeligt kamera kunne efterlade sort video og en aktiv billedknap. Et fejlet opslag krævede tidligere et nyt foto.",
+      "cause": "Kameraets livscyklus og det midlertidige cover blev ikke håndteret konsekvent ved fejl og forsinkede svar.",
+      "solution": "Skjul stoppet eller utilgængeligt livekamera. Vis input-capture-reserve. Behold det komprimerede foto i hukommelsen, så Prøv analysen igen kan genbruge bytes; tilbyd beskæring, nyt foto og annullering.",
+      "prevention": "Dæk afvist kamera, forsinket kamerastart, genforsøg, beskæring og annullering. Undersøg fysisk enhed særskilt ved nye kamerafejl.",
+      "evidence": "PR #4 implementerede rettelsen med 198 enhedstests og 50 E2E-tests. De afsluttende 52 mockede browsertests dækker også disse regressioner.",
+      "safety": "Stop kamerastreams ved afslutning. Gem ikke midlertidige AI-fotos i lager eller logs.",
+      "sources": [
+        "min-filmsamling-cover-levering.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F07",
+      "title": "Forsinkede svar overskriver nyere kladde eller noter",
+      "category": "produktion",
+      "status": "mocktestet",
+      "symptom": "Overlappende opslag, kamera, nyt foto og navigation kunne ændre en nyere kladde.",
+      "cause": "Gamle asynkrone operationer kan afslutte efter brugerens næste handling.",
+      "solution": "Ignorér forældede svar, bevar egne noter og placering, og gem kladden ved hvert trin. Annullering beholder kladden; metadatafejl beholder den allerede fundne titel.",
+      "prevention": "Regressionstest redigering under opslag, navigation under lagring, annullering, nyt foto og eksisterende filmredigering.",
+      "evidence": "Mockede iPhone-WebKit/Chromium-regressioner for alle nævnte forløb indgår i de 52 beståede afsluttende cases.",
+      "safety": "Overskriv ikke egne coverfotos uden accept, og gem ikke en testfilm i brugerens samling uden særskilt ønske.",
+      "sources": [
+        "min-filmsamling-cover-levering.md",
+        "tests/e2e/regressions.spec.js"
+      ]
+    },
+    {
+      "id": "F08",
+      "title": "Login virker på iPhone, men ikke i testfanen",
+      "category": "opsætning",
+      "status": "liveverificeret",
+      "symptom": "Codex-fanen viste Adgang blev afvist, selv om brugeren var logget ind på iPhonen. Senere udløb login under længere testarbejde.",
+      "cause": "Sessioner gælder den konkrete browser/enhed og udløber efter 900 sekunder. Den første afvisnings præcise årsag blev ikke fastslået.",
+      "solution": "Log ind i den præcise appfane, og kontrollér den synlige besked Logget ind. Filmopslag og AI er klar. Forny session ved udløb med eksisterende APP-kode.",
+      "prevention": "Kontrollér fane, Worker-adresse og loginstatus før providerdiagnose. Rotér ikke adgangskoden blot for at løse et udløbet token.",
+      "evidence": "Ejerens login i den faktisk synlige appfane blev bekræftet før det vellykkede live barcode/TMDB-opslag. En udløbet session nåede ikke OpenAI.",
+      "safety": "APP_ACCESS_KEY bruges kun til login og gemmes ikke råt af frontend. Ingen adgangskoder eller tokens i chat eller logs.",
+      "sources": [
+        "min-filmsamling-loginverifikation-20261012.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F09",
+      "title": "Worker-adressen er tom eller viser en eksempeladresse",
+      "category": "opsætning",
+      "status": "mocktestet",
+      "symptom": "Indstillinger viste https://din-worker.workers.dev som placeholder, så brugeren manglede en rigtig forbindelsesadresse.",
+      "cause": "Et tomt gemt felt eller en manglende standardadresse kan gøre opsætningen uklar.",
+      "solution": "Brug standarden https://min-filmsamling-api.min-filmsamling.workers.dev ved ny installation og tom indstilling. Bevar en bevidst brugerdefineret adresse.",
+      "prevention": "Skeln mellem placeholder og faktisk værdi. Test ny installation, tom indstilling og brugerdefineret adresse efter reload.",
+      "evidence": "Fire config-enhedstests og målrettede iPhone-browsercases dækker standard/tom/brugerdefineret adresse. Live Test forbindelse gav OK.",
+      "safety": "Adresse er offentlig konfiguration, ikke en API-nøgle. Origin skal være https://tobibeepdk.github.io uden sti.",
+      "sources": [
+        "tests/unit/config.test.js",
+        "tests/e2e/iphone.spec.js",
+        "min-filmsamling-loginverifikation-20261012.md"
+      ]
+    },
+    {
+      "id": "F10",
+      "title": "TMDB afviser adgang eller tokenet kan ikke findes",
+      "category": "opsætning",
+      "status": "liveverificeret",
+      "symptom": "Autentificeret filmopslag gav PROVIDER_AUTH. TMDB viste Request an API key i stedet for et Read Access Token.",
+      "cause": "TMDB-adgang var ikke accepteret. Den oprindelige afvisnings årsag blev ikke bekræftet som forkert type, udløb eller andet.",
+      "solution": "Ejeren gennemførte Developer-ansøgningen, kontaktoplysninger og vilkår. API Read Access Token blev gemt som TMDB_READ_TOKEN i Cloudflare og deployet; Worker tilføjer Bearer-headeren.",
+      "prevention": "Brug Read Access Token, ikke feltet API Key. En krypteret secret og grøn health er kun konfigurations-/forbindelsesbevis; kontrollér et autentificeret filmopslag bagefter.",
+      "evidence": "Efter ejerens tokenopsætning returnerede live TMDB National Treasure (2004), komplet metadata og et indlæst cover.",
+      "safety": "Ejeren indtaster token og accepterer vilkår selv. Ingen værdier eller kontaktoplysninger i fejlloggen.",
+      "sources": [
+        "min-filmsamling-tmdb-ansoegning-status-20261012.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F11",
+      "title": "Cover-AI afvises med HTTP 429; ingen flere udgifter",
+      "category": "opsætning",
+      "status": "blokeret",
+      "symptom": "Autentificeret live cover gav PROVIDER_RATE_LIMIT, også efter pause og efter opdateret fejlklassifikation.",
+      "cause": "OpenAI afviste med en grænsefejl. Den forbundne Personal-kontovisning viste 0 kredit; Worker-nøglens præcise projektgrænse er ikke fastslået alene af dette.",
+      "solution": "Fire nyere kredit/spend/usage-koder blev tilføjet den faste PROVIDER_QUOTA-allowlist. Ukendte 429-koder forbliver konservative. Efter brugerens fravalg af flere udgifter blev yderligere AI-forsøg stoppet, og ingen kredit købt.",
+      "prevention": "Skeln mellem rate, kredit, projekt-/organisationsbudget og modeladgang, før der gives kontoråd. Kontrollér aktuelle officielle koder, og gentag ikke blindt requests eller nøgleoprettelse.",
+      "evidence": "Fire regressioner fejlede før allowlist-rettelsen, 76 adaptertests bestod efter. PR #7 er udgivet. Live AI gav fortsat 429 og intet genkendelsesresultat.",
+      "safety": "Brugerens nulbudget gælder fortsat. Ingen køb eller betalte liveforsøg som fejlsøgningsløsning uden nyt udtrykkeligt ønske.",
+      "sources": [
+        "min-filmsamling-slutrapport-20261012.md",
+        "PR #7"
+      ]
+    },
+    {
+      "id": "F12",
+      "title": "Risiko for tab ved migration, backup eller anden origin",
+      "category": "forebyggelse",
+      "status": "testdaekket",
+      "symptom": "Ældre film, kladder, egne covers og indstillinger skal overleve opdatering; tidligere browserdata kan ligge på en anden origin.",
+      "cause": "Browserlager er adskilt efter origin/profil. En delvis migration eller uvalideret import kan skade data.",
+      "solution": "Migrér atomisk og verificér filmfelter/coverbytes før færdigmarkering og oprydning af gamle settings-secrets. Bevar gammel filmsamling og kladde. Eksportér på gammel origin og importér backup på ny origin.",
+      "prevention": "Valider hele backupformatet og versionen før atomisk merge. Bevar eksisterende ID, noter, placering, set/favorit og egne covers; eksportér jævnligt.",
+      "evidence": "Lager-/backup-/migrationsenhedstests og mockede iPhone-migrationstests består. Der er ikke dokumenteret et faktisk produktionstab i dette forløb.",
+      "safety": "Backup må ikke indeholde settings-secrets, APP-kode eller session-token. Slet ikke Safari-data for at reparere opslag.",
+      "sources": [
+        "docs/OPSÆTNING-DANSK.md",
+        "tests/unit/storage.test.js",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F13",
+      "title": "Gammel frontend, forkert PWA-fil eller blank side",
+      "category": "forebyggelse",
+      "status": "testdaekket",
+      "symptom": "Cache kan fastholde en tidligere appversion; manglende modul kan forhindre start. Et kontrolscript fik 404 på service-worker.js.",
+      "cause": "Appen registrerer sw.js, ikke service-worker.js. GitHub Pages kræver /min-filmsamling/-base. Manglende moduler er en separat startupfejl.",
+      "solution": "Byg med pnpm build og brug versioneret statisk cache samt Opdatér appen. Behold boot-fejlsiden ved modulfejl, og kontrollér registreret filnavn og path før kodeændring.",
+      "prevention": "Cache aldrig API-svar. Bevar IndexedDB ved opdatering. Ændr ikke boot.js alene på grund af den kendte ikke-blokerende classic-script-advarsel.",
+      "evidence": "sw.js og TMDB-logo gav HTTP 200; SW a727676d3202dfbb har 11 lokale filer. Ejerens opdateringsknap og efterfølgende TMDB-kreditering blev bekræftet. Offline- og manglende-modul-tests er mockede browsercases.",
+      "safety": "Ingen cache-/Safari-sletning som standardløsning. Service-worker.js-404 var en forkert testadresse, ikke en appfejl.",
+      "sources": [
+        "min-filmsamling-scan-slutrapport-2026-10-11.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F14",
+      "title": "GitHub-skrivning afvises med 403",
+      "category": "miljø",
+      "status": "loest",
+      "symptom": "Connectoren gav HTTP 403, mens Git-CLI manglede login; genforbindelse alene gav ikke bevis for skriveadgang.",
+      "cause": "En bestemt connector/CLI-skrivevej havde ikke adgang, selv om ejerens almindelige browserlogin virkede.",
+      "solution": "Publicér godkendte sikre kildefiler gennem ejerens GitHub-UI på ny branch. Verificér hele remote-tree mod testet lokal tree før PR/merge, og afvent CI.",
+      "prevention": "Kontrollér den konkrete skrivevej. Gentag ikke uændrede 403-forsøg eller brug et permissionsflag som bevis. Worker deployes manuelt; Pages kun fra main efter checks.",
+      "evidence": "PR #5, #6 og #7 blev flettet; tree f7d64bcea1fa3b38a10b26a91b1f813674b1fcd3 matcher testet slutkilde. Main-CI og Pages er success på e95c678d.",
+      "safety": "Udtræk ikke browsercookies, credentials eller sessioner for at omgå connectorens afvisning.",
+      "sources": [
+        "min-filmsamling-scan-slutrapport-2026-10-11.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F15",
+      "title": "Lokale filer hænger, eller primær Git-mappe er skrivebeskyttet",
+      "category": "miljø",
+      "status": "haandteret",
+      "symptom": "Nogle filreads hang, primær checkout var gammel/ændret, og .git kunne ikke muteres sikkert.",
+      "cause": "Filadgang og checkout-miljø var problemet; en bestemt underliggende filsynkronisering blev ikke bevist.",
+      "solution": "Brug den verificerede komplette bundle i en isoleret, fungerende checkout. Arbejd dér, sammenlign offentlig main-tree, og eksportér en verificeret ny bundle.",
+      "prevention": "Genbrug fungerende runtime og checkout. Kontrollér version og indhold før copy/sync; skriv ikke en blanding af gamle og nye kilder tilbage.",
+      "evidence": "Main e95c678d-tree er verificeret; min-filmsamling-main-final-20261012.bundle er verificeret og indeholder komplet historik. Primær checkout blev ikke nulstillet.",
+      "safety": "Bevar brugerændringer og historik. Ingen reset, tvungen partial-sync eller produktionstilpasning for lokale filproblemer.",
+      "sources": [
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F16",
+      "title": "Testværktøj stopper før assertions eller fejler på typeantagelse",
+      "category": "testvaerktoj",
+      "status": "loest",
+      "symptom": "Miniflare-konvertering afviste modulesRules; workerd fik listen EPERM; en E2E-test forventede et numerisk år i stedet for formens streng.",
+      "cause": "Testopsætning, manglende lokal porttilladelse og forkert assertion; de fejl dokumenterede ikke en ny produktionsfejl.",
+      "solution": "Brug en eksplicit ES-modulliste og kompatibel pinnet Miniflare. Giv den nødvendige lokale testserver tilladelse; vælg ledig testport, hvis optaget. Ret kun år-assertionen til eksisterende formtype.",
+      "prevention": "Bekræft at testen når relevante assertions. Brug Node 24 og pnpm 11.19.0, frozen lockfile og eksisterende esbuild/workerd allowBuilds.",
+      "evidence": "Uændret produktionskilde bestod 227 enhedstests og 52 E2E-tests efter miljø-/testrettelser. Tidligere port 4173 var optaget; afsluttende lokal port var 4193.",
+      "safety": "Ingen rigtige providerkald eller secrets er nødvendige til disse mock-tests. Undlad produktionsrettelser for miljø- og værktøjsfejl.",
+      "sources": [
+        "min-filmsamling-cover-levering.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F17",
+      "title": "Browserstyring viser gammel tilstand eller forkert loginfane",
+      "category": "testvaerktoj",
+      "status": "haandteret",
+      "symptom": "UI-handlinger kunne se uændrede ud i samme toolkald; virtuelle faner var ikke den ejerens synlige appfane. Secretfølsom DOM-læsning blev afvist.",
+      "cause": "Asynkron native browseropdatering, forskellige faneidentiteter og sikkerhedsgrænser i testværktøjet.",
+      "solution": "Tag en frisk DOM-observation i næste kald og genfind fane/provider-ID ved faktisk lukning. Brug den synlige Codex-appfane til brugerlogin. Læs kun nødvendige ufølsomme labels/status.",
+      "prevention": "Kontrollér aktuel fane og tilstand før genforsøg. Bed ikke om gentaget login, før den konkrete fane er identificeret. Gem kun screenshots, hvor resultatet faktisk ses.",
+      "evidence": "Faktisk native appfane blev identificeret og brugt til live barcode/TMDB. Ældre beskårne Cloudflare-billeder viste baggrund og må ikke bruges som secret-/deploybevis.",
+      "safety": "Ingen token-/cookie-/IndexedDB-sessionudtræk, fuld secret-side eller logning af autentificeringsfelter.",
+      "sources": [
+        "min-filmsamling-tmdb-ansoegning-status-20261012.md",
+        "min-filmsamling-slutrapport-20261012.md"
+      ]
+    },
+    {
+      "id": "F18",
+      "title": "Grøn health eller mocktest bliver forvekslet med livebevis",
+      "category": "forebyggelse",
+      "status": "testdaekket",
+      "symptom": "Der kunne drages for brede konklusioner af health, secret-navne, eksisterende titel eller et syntetisk AI-resultat.",
+      "cause": "Forbindelse, autentificering, provideradgang, metadata, fysisk scanning og AI-præcision er forskellige testtrin.",
+      "solution": "Angiv altid version, faktisk kommando/resultat, runtime og mock/live-scope. Kontrollér resultatet efter hele handlingen; bevar tidligere evidens tidsstemplet.",
+      "prevention": "Test health, session, barcode, TMDB og AI særskilt. Bevis en ny titel fra opslag frem for et allerede udfyldt felt. Brug ingen nye API-nøgler eller gentagne beståede tests uden en ny grund.",
+      "evidence": "Slut-main e95c678d: 227 unit, 52 E2E, lint/build/security og Pages success. Rekursiv dist-søgning: 0 secret-fund. Live barcode/TMDB virker; live AI og fysisk kamerascanning er ikke bekræftet.",
+      "safety": "Secrets forbliver i Worker. Ingen providertekst, billeder, nøgler eller persondata i huskenoter eller testlogs.",
+      "sources": [
+        "min-filmsamling-slutrapport-20261012.md",
+        "min-filmsamling-kontroloutput-20261012.log"
+      ]
+    }
+  ]
+}
