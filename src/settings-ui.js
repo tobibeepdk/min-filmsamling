@@ -78,6 +78,31 @@ export function renderSettings(settings, actions) {
         'Dine data følger webstedets origin. Slet ikke Safari-data uden backup.',
       ),
     ),
+    el(
+      'section',
+      { class: 'panel tmdb-attribution' },
+      el('h3', {}, 'Om appen'),
+      el('p', {}, 'Filmoplysninger og onlinecovers fra TMDB.'),
+      el(
+        'a',
+        {
+          class: 'tmdb-link',
+          href: 'https://www.themoviedb.org',
+          target: '_blank',
+          rel: 'noopener noreferrer',
+        },
+        el('img', {
+          class: 'tmdb-logo',
+          src: `${import.meta.env.BASE_URL}tmdb-logo.svg`,
+          alt: 'The Movie Database (TMDB)',
+        }),
+      ),
+      el(
+        'p',
+        { lang: 'en' },
+        'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+      ),
+    ),
   );
   return form;
 }

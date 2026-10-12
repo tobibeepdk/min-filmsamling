@@ -440,6 +440,21 @@ textarea {
 .panel .actions:last-child {
   margin-bottom: 0;
 }
+.tmdb-attribution h3 {
+  font-size: 16px;
+}
+.tmdb-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  max-width: 100%;
+}
+.tmdb-logo {
+  display: block;
+  width: 100px;
+  max-width: 100%;
+  height: auto;
+}
 .editor,
 .settings {
   max-width: 820px;

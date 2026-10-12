@@ -17,6 +17,7 @@ async function lookup(upstream) {
         'worker/src/http.js',
         'worker/src/providers.js',
         'shared/barcode.js',
+        'shared/product-title.js',
         'shared/service-errors.js',
       ].map((path) => ({ type: 'ESModule', path: resolve(path) })),
       modulesRoot: resolve('.'),

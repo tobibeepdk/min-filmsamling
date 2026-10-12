@@ -1,5 +1,45 @@
 # Implementering og verifikation
 
+## TMDB-opslag efter stregkode – 12. oktober 2026
+
+Rensning af kendte produktangivelser bruges nu både ved stregkodeopslag og ved søgning fra gamle kladder. EAN `7393834487707` gav i den offentlige stregkodedatabase titlen `National Treasure - Scandinavian Edition.`. Den rå titel fandt ingen TMDB-film, mens en kontrolleret søgning efter `National Treasure` i den udgivne app hentede titel, originaltitel, år `2004`, handling, genre, instruktør, skuespillere, spilletid og et indlæst onlineomslag. Denne live diagnose skete efter ejerens sikre TMDB-tokenopsætning og før udgivelsen af den nye titelrensning. Et fysisk iPhone-kamera blev ikke brugt til diagnosen.
+
+Ændringen bevarer brugerdata, sessionregler, secrets, providertransport, Durable Object-bindinger og migrationshistorik. Indstillinger viser nu TMDBs officielle, lokalt bundlede logo og attributiontekst. Ingen nye produktionsafhængigheder. Den officielle OpenAI-modelreference bekræfter det eksisterende konfigurerbare `gpt-6.1-sol` med billedinput, Responses API og Structured Outputs: https://developers.openai.com/api/docs/models/gpt-6.1-sol.
+
+Afsluttende lokale kontroller på branch `codex/fix-edition-movie-lookup`, baseret på main `37688e35e7ecd8612b97a40df399b51920f0f8c2`, med Node.js 24 og pnpm 11.19.0:
+
+```text
+pnpm test
+Test Files  11 passed (11)
+     Tests  220 passed (220)
+  Duration  2.16s
+
+pnpm lint
+$ eslint src shared worker/src scripts tests *.js --no-warn-ignored
+[exit 0]
+
+pnpm build
+✓ 249 modules transformed.
+✓ built in 805ms
+Service worker a727676d3202dfbb: 11 lokale filer; ingen API-cache.
+
+pnpm security
+Sikkerhed: 73 filer + 69 git-commits kontrolleret; 0 secret-fund.
+Browser-build: ingen servernøgler eller direkte OpenAI-kald.
+
+FILMSAMLING_TEST_PORT=4193 pnpm test:e2e
+Running 52 tests using 1 worker
+52 passed (41.9s)
+
+rg --files-with-matches --hidden \
+  'OPENAI_API_KEY|APP_ACCESS_KEY|SESSION_SIGNING_KEY|TMDB_READ_TOKEN|BARCODE_PROVIDER_KEY|sk-(proj-)?[A-Za-z0-9_-]{20,}|api\.openai\.com' dist
+[intet output; exit 1; 0 fund]
+```
+
+Den nye browserregression scanner en kendt kode uden titelindtastning, henter metadata, bevarer noter og placering, gemmer filmen, genindlæser og genbruger koblingen uden nye API-kald. Tests bruger mocks til provider og kamera i WebKit og Chromium med iPhone-viewport. Den første kørsel havde to fejl i den nye tests forventning: et gemt år er en streng fra formularen, ikke et tal. Kun testforventningen blev rettet; produktionskode og brugerdata blev ikke ændret af dette testproblem. De oprindelige 50 browserchecks bestod i begge kørsler.
+
+Et forsøg på live cover-AI med det offentlige onlineomslag stoppede ved frontendens udløbne session, før providerkald. Det dokumenterer derfor ikke OpenAI-kontoens adgang eller genkendelsespræcision. De automatiske tests dækker fortsat det strukturerede resultat `The Wicked` og lav/høj confidence. Release, CI, Worker-version og efterfølgende live genprøve dokumenteres i leveringsrapporten.
+
 ## Scanningsrettelse – 7. oktober 2026
 
 Stregkodeopslaget fejlede før providerkontakt, fordi Workers-runtime afviste `redirect: 'error'` i det fælles API-kald. `worker/src/http.js` bruger nu `redirect: 'manual'` og afviser stadig alle omdirigeringer, så credentials ikke sendes videre. Barcode, TMDB og AI bruger samme helper. Der er ingen ændring i frontendens filmdata, kamera, IndexedDB, secrets, Durable Object-bindinger eller migrationshistorik. Den statiske PWA beholder `/min-filmsamling/` og samme service-worker-version.
