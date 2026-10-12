@@ -170,6 +170,66 @@ async function uploadCover(page) {
     .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(bytes) });
 }
 
+test('kendt stregkode henter filmdata uden titelindtastning og genbruger lokal kobling', async ({ page }) => {
+  const treasure = {
+    ...movie,
+    title: 'National Treasure',
+    originalTitle: 'National Treasure',
+    year: 2004,
+    genre: 'Eventyr',
+    runtime: 131,
+    tmdbId: 100,
+  };
+  let barcodeCalls = 0;
+  let searchCalls = 0;
+  await setup(page, {
+    '/lookup-barcode': (request) => {
+      barcodeCalls += 1;
+      expect(request.postDataJSON()).toEqual({ barcode: '7393834487707' });
+      // The real adapter's edition removal is covered by worker.test.js.
+      return { found: true, title: 'National Treasure', format: 'DVD', source: 'upcitemdb' };
+    },
+    '/search-movie': (request) => {
+      searchCalls += 1;
+      expect(request.postDataJSON().title).toBe('National Treasure');
+      return { configured: true, candidates: [treasure], selected: treasure };
+    },
+  });
+  await login(page);
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('');
+  await page.getByLabel('Noter').fill('Min note før scanning');
+  await page.getByLabel('Placering').fill('Reol 4');
+  await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
+  await page.getByLabel('Stregkodenummer').fill('7393834487707');
+  await page.getByRole('button', { name: 'Brug nummer', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Filmoplysninger hentet');
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('National Treasure');
+  await expect(page.getByLabel('Originaltitel', { exact: true })).toHaveValue('National Treasure');
+  await expect(page.getByLabel('År', { exact: true })).toHaveValue('2004');
+  await expect(page.getByLabel('Genre', { exact: true })).toHaveValue('Eventyr');
+  await expect(page.getByLabel('Spilletid (minutter)', { exact: true })).toHaveValue('131');
+  await expect(page.getByLabel('Noter')).toHaveValue('Min note før scanning');
+  await expect(page.getByLabel('Placering')).toHaveValue('Reol 4');
+  await page.getByRole('button', { name: 'Gem film', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'National Treasure', exact: true })).toBeVisible();
+  expect((await records(page)).movies[0]).toMatchObject({
+    title: 'National Treasure',
+    year: '2004',
+    barcode: '7393834487707',
+    notes: 'Min note før scanning',
+    location: 'Reol 4',
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
+  await page.getByLabel('Stregkodenummer').fill('7393834487707');
+  await page.getByRole('button', { name: 'Brug nummer', exact: true }).click();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('National Treasure');
+  await expect(page.getByLabel('År', { exact: true })).toHaveValue('2004');
+  expect(barcodeCalls).toBe(1);
+  expect(searchCalls).toBe(1);
+});
+
 test('et fejlet coveropslag bevarer fotoet og kan prøves igen uden ny titel eller nyt foto', async ({
   page,
 }, testInfo) => {
