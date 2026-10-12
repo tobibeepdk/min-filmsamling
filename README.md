@@ -56,3 +56,5 @@ Frontend: Vite, ES-moduler og lokal service worker. Backend: Cloudflare Worker, 
 Mock-tests dokumenterer kodeadfærd. Reelt kamera på en fysisk iPhone, AI-genkendelsens præcision og adgang til liveudbyderne kontrolleres efter brugerens deployment.
 
 Stregkodeudbyderens adapter testes også i den samme `workerd`-runtime, som Wrangler bruger, med en mocked ekstern database. Testen kontrollerer både et filmfund og afvisning af omdirigeringer uden at videresende providercredentials. En grøn `/health` alene bekræfter ikke, at provideropslag virker.
+
+Worker renser kendte produktangivelser før filmopslag. Eksempelvis bliver `National Treasure - Scandinavian Edition.` til `National Treasure`; årstal og tvetydige titler bevares. Samme rensning bruges ved opslag fra gamle kladder, så titlen ikke skal rettes manuelt. Filmoplysningerne krediterer TMDB under **Indstillinger → Om appen**, og logoet er bundlet til offlinebrug.
