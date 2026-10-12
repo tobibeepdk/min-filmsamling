@@ -341,9 +341,40 @@ describe('Vision proxy', () => {
     ],
     [
       429,
+      { error: { code: 'billing_hard_limit_reached', message: 'private-provider-detail' } },
+      'PROVIDER_QUOTA',
+    ],
+    [
+      429,
+      { error: { code: 'credit_balance_exhausted', message: 'private-provider-detail' } },
+      'PROVIDER_QUOTA',
+    ],
+    [
+      429,
+      { error: { code: 'organization_spend_limit_exceeded', message: 'private-provider-detail' } },
+      'PROVIDER_QUOTA',
+    ],
+    [
+      429,
+      { error: { code: 'project_spend_limit_exceeded', message: 'private-provider-detail' } },
+      'PROVIDER_QUOTA',
+    ],
+    [
+      429,
+      { error: { code: 'organization_usage_limit_exceeded', message: 'private-provider-detail' } },
+      'PROVIDER_QUOTA',
+    ],
+    [
+      429,
       { error: { code: 'rate_limit_exceeded', message: 'private-provider-detail' } },
       'PROVIDER_RATE_LIMIT',
     ],
+    [
+      429,
+      { error: { code: 'unrecognized_provider_code', message: 'private-provider-detail' } },
+      'PROVIDER_RATE_LIMIT',
+    ],
+    [429, { error: { message: 'private-provider-detail' } }, 'PROVIDER_RATE_LIMIT'],
     [
       400,
       { error: { code: 'invalid_request', message: 'private-provider-detail' } },
@@ -364,6 +395,7 @@ describe('Vision proxy', () => {
       expect(result.code).toBe(code);
       expect(JSON.stringify(result)).not.toContain('private-provider-detail');
       expect(JSON.stringify(result)).not.toContain('invalid_api_key');
+      if (body.error?.code) expect(JSON.stringify(result)).not.toContain(body.error.code);
       if (code === 'PROVIDER_QUOTA') expect(response.headers.has('Retry-After')).toBe(false);
     },
   );

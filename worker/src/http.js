@@ -112,7 +112,14 @@ export async function upstreamJson(
       if (provider === 'openai' && result.status === 429) {
         try {
           const body = await readJson(result, 8192);
-          quota = ['insufficient_quota', 'billing_hard_limit_reached'].includes(body.error?.code);
+          quota = [
+            'insufficient_quota',
+            'billing_hard_limit_reached',
+            'credit_balance_exhausted',
+            'organization_spend_limit_exceeded',
+            'project_spend_limit_exceeded',
+            'organization_usage_limit_exceeded',
+          ].includes(body.error?.code);
         } catch {
           await result.body?.cancel().catch(() => {});
         }

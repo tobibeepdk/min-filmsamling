@@ -35,3 +35,15 @@ Et tidligere testforsøg med `modulesRules` kunne ikke konverteres til Miniflare
 ## Miljø: pakkehentning og manglende testoutput
 
 Sandboxens DNS-adgang til npm kan give `ENOTFOUND`. Kør den nødvendige pakkehentning med godkendt netværksadgang; ændr ikke appkode eller dependencyversion for en lokal netværksfejl. Hvis en afbrudt toolsession mister testoutput, gem output fra en ny fuld kontrol i en lokal, ikke-committed fil. Bevar fungerende runtime og beståede kontroller, når output allerede er tilgængeligt.
+
+## 12. oktober 2026: OpenAI 429 kræver skelnen mellem konto- og rategrænser
+
+**Symptom:** Et autentificeret liveforsøg med et offentligt testcover gav `PROVIDER_RATE_LIMIT`, også efter en pause. Stregkode og TMDB virkede. En tidligere udløbet session var en separat hændelse og nåede ikke OpenAI.
+
+**Årsag og sikkerhed:** Den gamle allowlist dækkede kun to ældre kvotekoder. De aktuelle [officielle fejlkoder](https://developers.openai.com/api/docs/guides/error-codes) omfatter også `credit_balance_exhausted`, `organization_spend_limit_exceeded`, `project_spend_limit_exceeded` og `organization_usage_limit_exceeded`. Derfor kunne klientens gamle kode ikke alene udelukke en kontogrænse. Den konkrete årsag på ejerens konto er endnu ikke bekræftet.
+
+**Afprøvet løsning:** De fire faste koder klassificeres som `PROVIDER_QUOTA`; almindelig `rate_limit_exceeded`, ukendte og manglende koder forbliver `PROVIDER_RATE_LIMIT`. Rå providertekst, nøgler og billeder returneres eller logges ikke. Rettelsen ændrer ingen sessioner, secrets, lagrede film eller bindings.
+
+**Bevis:** Fire nye regressioner fejlede før rettelsen; bagefter består alle 76 adaptertests, samlet 227 enhedstests og 52 mocked iPhone-browsertests. Lint, build og secret-kontrol består. Livekontrollen efter Worker-opdateringen gav stadig `PROVIDER_RATE_LIMIT`; AI-genkendelse er derfor ikke live-verificeret. Dette er en rettet klassifikationsmangel, ikke dokumentation for løst kontoadgang.
+
+**Forebyggelse:** Kontrollér aktuelle officielle fejlkoder før kontoråd. Bekræft quota/kredit-/spendårsag før anbefaling om betaling; gentag ikke requests eller roter nøgler som blind løsning. Skeln mellem mock-tests, vellykket TMDB-opslag og et faktisk AI-resultat. Ejeren håndterer selv login og eventuelle betalingsændringer.
