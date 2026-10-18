@@ -1,10 +1,12 @@
 # Opsætning af Min filmsamling
 
-Appen består af en statisk frontend på GitHub Pages og en Cloudflare Worker til login, covergenkendelse og metadataopslag. Filmene ligger lokalt på din enhed; de bliver ikke uploadet som en fælles samling.
+Appen består af en statisk frontend på GitHub Pages og en Cloudflare Worker til login, stregkodeopslag og TMDB-metadata. Standardflowet bruger ingen betalt cover-AI. Filmene og egne coverfotos ligger lokalt på din enhed; de bliver ikke uploadet som en fælles samling eller til covergenkendelse.
 
-Frontendens adresse er **https://tobibeepdk.github.io/min-filmsamling/** efter Pages-deploy. Du skal først oprette Worker og secrets og derefter gemme Workerens HTTPS-adresse i appens indstillinger.
+Frontendens adresse er **https://tobibeepdk.github.io/min-filmsamling/** efter Pages-deploy. Ved en ny installation oprettes først Worker og secrets, og derefter gemmes Workerens HTTPS-adresse i appens indstillinger.
 
-Worker er udgivet for dette repository. Dens adresse til appens indstillinger er `https://min-filmsamling-api.min-filmsamling.workers.dev`. Login og AI kræver stadig de tre obligatoriske secrets i trin 3; en vellykket forbindelsestest alene bekræfter ikke, at secrets er konfigureret.
+Den hidtidige Worker-adresse til appens indstillinger er `https://min-filmsamling-api.min-filmsamling.workers.dev`. På en eksisterende installation genbruges login-secrets og et eventuelt TMDB-token; de skal ikke oprettes eller roteres igen. Login kræver kun de to secrets i trin 3 samt limiter-bindingen. En vellykket forbindelsestest alene bekræfter ikke, at login eller metadataopslag virker.
+
+Ved opdatering skal den nye Worker med `COVER_AI_ENABLED = "false"` udgives manuelt, før også ældre appversioners AI-kald er spærret på serveren. En frontendopdatering alene ændrer ikke den allerede udgivne Worker. Denne vejledning er ikke et bevis for, at opdateringen er deployet. Eksisterende Cloudflare- eller providerplaner kan fortsat have deres egne udgifter og kvoter; der loves ikke gratis hosting eller ubegrænsede opslag.
 
 ## 1. Installér udviklingsværktøjerne
 
@@ -36,12 +38,14 @@ Kontrollér `[vars]` i `worker/wrangler.toml`:
 
 ```toml
 ALLOWED_ORIGIN = "https://tobibeepdk.github.io"
-OPENAI_MODEL = "gpt-6.1-sol"
+COVER_AI_ENABLED = "false"
 DAILY_LIMIT = "100"
 BARCODE_PROVIDER = "upcitemdb"
 ```
 
 `ALLOWED_ORIGIN` er frontendens **origin**: protokol og værtsnavn, uden `/min-filmsamling/` og uden afsluttende skråstreg. Appens fulde URL indeholder stien; CORS-indstillingen gør det ikke. Worker afviser andre origins.
+
+Bevar `COVER_AI_ENABLED = "false"`. Worker svarer `AI_DISABLED` på `/identify-cover` før et providerkald, også hvis en gammel app stadig forsøger at sende et cover. Kun den præcise streng `"true"` aktiverer den tidligere adapter; en manglende indstilling eller andre værdier aktiverer den ikke. En eksisterende `OPENAI_MODEL`-indstilling eller OpenAI-secret er ubrugt, så længe funktionen er deaktiveret.
 
 Opret Worker og dens Durable Object-binding med den første deploy:
 
@@ -49,30 +53,24 @@ Opret Worker og dens Durable Object-binding med den første deploy:
 pnpm worker:deploy
 ```
 
-Wrangler viser Workerens HTTPS-adresse. Gem adressen til senere. API-funktionerne kræver de obligatoriske secrets fra næste trin.
+Wrangler viser Workerens HTTPS-adresse. Gem adressen til senere. API-funktionerne kræver de obligatoriske login-secrets fra næste trin.
 
 ## 3. Tilføj secrets sikkert
 
-Opret en OpenAI API-nøgle i dit eget projekt via [OpenAI API keys](https://platform.openai.com/api-keys). Projektet skal have adgang til den valgte model og API-forbrug. Gem nøglen med Wranglers prompt:
-
-```bash
-pnpm exec wrangler secret put OPENAI_API_KEY --config worker/wrangler.toml
-```
-
-Indsæt værdien i den interaktive secret-prompt. Brug samme fremgangsmåde til to forskellige tilfældige værdier fra din adgangskodeadministrator:
+På en ny Worker bruges to forskellige tilfældige værdier fra din adgangskodeadministrator:
 
 ```bash
 pnpm exec wrangler secret put APP_ACCESS_KEY --config worker/wrangler.toml
 pnpm exec wrangler secret put SESSION_SIGNING_KEY --config worker/wrangler.toml
 ```
 
-Som genvej kan du køre de tre interaktive secret-prompts samlet fra en terminal:
+Som genvej kan du køre de to interaktive login-secret-prompts samlet fra en terminal:
 
 ```bash
 pnpm worker:setup
 ```
 
-Genvejen bruger Wranglers skjulte prompts og tilbyder også det valgfrie TMDB-token. Secretværdier skal fortsat kun indtastes i prompts; genvejen modtager dem ikke som argumenter eller fra filer.
+Genvejen bruger Wranglers skjulte prompts og tilbyder også det valgfrie TMDB-token. Den beder som standard ikke om en OpenAI-nøgle. Secretværdier skal kun indtastes i prompts; genvejen modtager dem ikke som argumenter eller fra filer. På en eksisterende installation med fungerende login behøver du ikke køre genvejen igen.
 
 Brug mindst 32 tegn til `SESSION_SIGNING_KEY`; brug også en lang tilfældig `APP_ACCESS_KEY`. `APP_ACCESS_KEY` er den adgangsnøgle, du senere bruger til login i appen. `SESSION_SIGNING_KEY` bruges kun på serveren til at signere sessioner.
 
@@ -80,7 +78,7 @@ Hvis du ændrer adgangsnøglen i Cloudflare-dashboardet, betyder **Value encrypt
 
 Secrets skal blive i Cloudflares secret-lager. Indsæt dem aldrig i `wrangler.toml`, frontendkode, et `VITE_`-felt, en backup, et issue eller en commit. Kommandolinjen ovenfor indeholder kun secretens navn, så værdien ikke bliver et shell-argument.
 
-Worker bruger `gpt-6.1-sol` gennem Responses API med billedinput og et strict JSON-schema. Den officielle [modelbeskrivelse](https://developers.openai.com/api/docs/models/gpt-6.1-sol) angiver billedinput og Structured Outputs. Se også OpenAIs vejledninger om [Images and vision](https://developers.openai.com/api/docs/guides/images-vision) og [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs). Modelunderstøttelsen er kontrolleret 1. oktober 2026; din konto skal selv have modeladgang.
+Login og den almindelige app kræver hverken `OPENAI_API_KEY` eller `OPENAI_MODEL`. Gamle OpenAI-secrets kan blive liggende ubrugt; du skal ikke købe kredit, oprette en ny nøgle eller rotere en eksisterende for at bruge standardflowet.
 
 ### Valgfrit: TMDB
 
@@ -90,7 +88,7 @@ Et TMDB API Read Access Token giver opslag af handling, skuespillere, instruktø
 pnpm exec wrangler secret put TMDB_READ_TOKEN --config worker/wrangler.toml
 ```
 
-Uden dette token kan du stadig registrere film manuelt og bruge covergenkendelse, når OpenAI og login er konfigureret. Appen viser, at TMDB-opslag mangler opsætning.
+Uden dette token kan du stadig registrere film manuelt og gemme dine egne coverfotos. Appen viser, at TMDB-opslag mangler opsætning. Har du allerede et fungerende TMDB-token, genbruges det.
 
 Appens **Indstillinger → Om appen** krediterer TMDB med et godkendt logo, et link til TMDB og den krævede tekst: “This product uses the TMDB API but is not endorsed or certified by TMDB.” Se TMDBs [attributionkrav](https://developer.themoviedb.org/docs/faq) og [godkendte logoer](https://www.themoviedb.org/about/logos-attribution). Det lokale `public/tmdb-logo.svg` er den uændrede **Alt short (blue)**-variant fra TMDBs officielle logoside. Logoet bruger appens `/min-filmsamling/`-basesti og medtages i det almindelige build og den statiske offlinecache.
 
@@ -102,7 +100,7 @@ Standardværdien `BARCODE_PROVIDER = "upcitemdb"` bruger UPCitemDBs trial-endpoi
 pnpm exec wrangler secret put BARCODE_PROVIDER_KEY --config worker/wrangler.toml
 ```
 
-Udbyderens egne kvoter og datadækning gælder stadig. En ukendt kode kan indtastes manuelt eller suppleres med et coverfoto.
+Udbyderens egne kvoter og datadækning gælder stadig. En ukendt kode eller providerfejl åbner **Søg efter film**, hvor du indtaster titlen og eventuelt årstal. Et coverfoto kan gemmes som dit eget lokale cover, men giver ikke automatisk en filmtitel.
 
 Der findes også en JSON-adapter. Sæt `BARCODE_PROVIDER = "json"` og `BARCODE_PROVIDER_URL` til din egen HTTPS-lookup-adresse i `[vars]`. Worker tilføjer queryparameteren `barcode`; en eventuel `BARCODE_PROVIDER_KEY` sendes som Bearer-header. Svaret skal have `found`, `title`, `description`, `format` og `images`, som angivet i `worker/src/providers.js`.
 
@@ -114,7 +112,7 @@ pnpm worker:deploy
 
 ## 4. Forbrugsgrænser
 
-`DAILY_LIMIT` er Workerens globale dagsgrænse for autentificerede API-kald: covergenkendelse, stregkodeopslag og filmopslag. Den aktuelle værdi er 100. Grænsen nulstilles ved nyt UTC-døgn og gælder på tværs af enheder og Worker-instanser via `RATE_LIMITER`, en Durable Object med vedvarende lagring. Et kald tælles før udbyderopslaget, så et mislykket eksternt opslag kan også bruge et kald.
+`DAILY_LIMIT` er Workerens globale dagsgrænse for autentificerede API-kald til stregkode- og filmopslag. Hvis den tidligere cover-AI-adapter senere aktiveres udtrykkeligt, er den også omfattet. Den aktuelle værdi er 100. Grænsen nulstilles ved nyt UTC-døgn og gælder på tværs af enheder og Worker-instanser via `RATE_LIMITER`, en Durable Object med vedvarende lagring. Et kald tælles før udbyderopslaget, så et mislykket eksternt opslag kan også bruge et kald.
 
 De øvrige aktuelle værdier i `worker/wrangler.toml` er:
 
@@ -128,7 +126,7 @@ De øvrige aktuelle værdier i `worker/wrangler.toml` er:
 | `LOGIN_RATE_LIMIT_PER_MINUTE` | 5 | Loginforsøg pr. IP pr. minut |
 | `LOGIN_DAILY_LIMIT` | 50 | Loginforsøg pr. IP pr. UTC-døgn |
 
-Ved en overskredet grænse svarer Worker med HTTP 429 og en ventetid. Grænserne tæller kald; de er ikke et beløb i kroner. Vælg en dagsgrænse, der passer til dit API-budget, og brug også OpenAI-projektets forbrugskontroller.
+Ved en overskredet grænse svarer Worker med HTTP 429 og en ventetid. Grænserne tæller kald; de er ikke et beløb i kroner. Bevar en dagsgrænse, der passer til de anvendte tjenesters kvoter. Deaktiveret cover-AI giver `AI_DISABLED` og kontakter ikke OpenAI.
 
 Bevar Durable Object-bindingen og dens migrationshistorik ved opdateringer. Den gemmer forbrugstællere, ikke din filmsamling.
 
@@ -169,12 +167,14 @@ Workflowen verificerer koden og kører `pnpm worker:deploy`. Runtime-secrets fra
 2. Appens indstillinger har standardadressen `https://min-filmsamling-api.min-filmsamling.workers.dev` forudfyldt på nye installationer, eller hvis ingen Worker-adresse er gemt. En eksisterende tilpasset adresse bevares. Hvis du bruger din egen Worker, kan du ændre adressen. Tryk **Test forbindelse** for at kontrollere forbindelsen.
 3. Log på med `APP_ACCESS_KEY`. Appen gemmer kun den kortlivede session og dens udløbstid; selve adgangsnøglen gemmes ikke.
 4. Vælg **Del → Føj til hjemmeskærm → Tilføj**.
-5. Tryk **Scan stregkode**, og giv kameratilladelse. En ukendt kode åbner automatisk coverkameraet; fotografér hele forsiden. Appen identificerer titlen og søger filmdata. Ved tvivl vælger du en af de store kandidatknapper. Du behøver ikke indtaste titlen.
-6. Hvis live-scanneren ikke virker på din telefon, vælg et foto eller indtast koden. Kontrollér AI-forslag og filmkandidater, før du gemmer.
+5. Tryk **Scan stregkode**, og giv kameratilladelse. En kendt kode kan finde filmdata automatisk. En kode, der allerede er knyttet til en film på enheden, bruger den lokale kobling.
+6. Ved ukendt kode eller providerfejl åbnes **Søg efter film**. Skriv **Filmtitel** og eventuelt **År**, tryk **Søg**, og vælg blandt TMDB-kandidaterne. Du kan også åbne søgningen fra forsiden eller filmredigeringen. Ukendte koder kræver titelindtastning i dette flow.
+7. Brug **Tag eget coverfoto** i filmredigeringen, hvis du vil gemme dit eget billede. Appen roterer efter EXIF, fjerner metadata og komprimerer fotoet til lokalt lager; billedet sendes ikke til AI. Egne coverfotos bevares, når metadata tilføjes.
+8. Hvis live-scanneren ikke virker på din telefon, vælg et stregkodefoto eller indtast koden. Kontrollér filmkandidaterne, før du gemmer. Når filmen gemmes med en gyldig kode, kan næste scanning bruge den lokale kobling.
 
-Test flowet med `7393834487707`: når udbyderen ikke har et resultat, skal coverkameraet åbne direkte. Et AI-resultat med **The Wicked**, år **2013** og confidence **0,94** vælges automatisk, hvis ingen anden kandidat er tæt på. Gem filmen, og scan koden igen for at bruge den lokale kobling uden udbyderkald. Dette er et testscenarie; udbyderens aktuelle dækning kan ændres.
+EAN `7393834487707` er tidligere livefundet som **National Treasure (2004)**. Udbyderens dækning kan ændres, så brug et mocked missing-result til at teste den ukendte kode og titelsøgningen; dette nummer beviser ikke længere det ukendte flow.
 
-Samlingen og filmredigering kan bruges offline efter første indlæsning. AI-, TMDB- og eksterne stregkodeopslag kræver netforbindelse og en gyldig session. Egne coverfotos bevares, når metadata tilføjes.
+Samlingen, filmredigering og egne coverfotos kan bruges offline efter første indlæsning. TMDB- og eksterne stregkodeopslag kræver netforbindelse og en gyldig session. Du kan altid skrive filmoplysninger manuelt.
 
 En ny appversion tilbydes gennem appens opdateringsknap. Opdateringen ændrer appens cache og bevarer IndexedDB-data. Service worker cacher appens statiske filer; API-svar bliver ikke lagt i offlinecachen.
 
@@ -199,32 +199,47 @@ pnpm exec playwright install chromium webkit
 pnpm test:e2e
 ```
 
-Tests bruger mocks til OpenAI, TMDB, stregkodeudbyder og kamera. De kræver ingen rigtige API-nøgler. Reelt kamera på en fysisk iPhone, AI-præcision og liveudbyderadgang skal afprøves efter din deployment.
+Tests bruger mocks til TMDB, stregkodeudbyder og kamera. Worker-tests bruger også mocks til at kontrollere, at deaktiveret cover-AI ikke kontakter OpenAI. De kræver ingen rigtige API-nøgler. Fysisk iPhone-kamera og liveudbyderadgang kræver særskilt kontrol efter deployment. Der skal ikke foretages betalte AI-forsøg for at verificere standardflowet.
 
 | Symptom | Kontrollér |
 | --- | --- |
 | Login eller lookup afvises af CORS | `ALLOWED_ORIGIN` skal være præcis `https://tobibeepdk.github.io`, uden sti eller skråstreg. |
 | Login udløber | Log på igen; standardlevetiden er 15 minutter. |
-| HTTP 503 / opsætning mangler | Workerens nødvendige secrets og modelkonfiguration. TMDB-token er særskilt og valgfrit. |
+| HTTP 503 / opsætning mangler | Login kræver `APP_ACCESS_KEY`, `SESSION_SIGNING_KEY` og limiter-bindingen. TMDB-token er særskilt og valgfrit; OpenAI-model og -nøgle kræves ikke. |
 | HTTP 429 | Vent den angivne tid; kontrollér egne grænser og udbyderens kvote. |
-| Stregkoden har intet resultat | Prøv coverfoto eller manuel titel; alle filmudgaver findes ikke hos udbyderen. |
+| Stregkoden har intet resultat | Indtast titel og eventuelt årstal i **Søg efter film**; alle filmudgaver findes ikke hos udbyderen. |
 | Kamera starter ikke | HTTPS, Safari-kameratilladelse og foto-/indtastningsreserven. |
-| Coveranalysen fejler | Fotoet vises fortsat. Tryk **Prøv analysen igen**, **Beskær titelområdet og prøv igen** eller **Tag nyt billede**. Annullering bevarer kladden. |
+| En gammel app viser `AI_DISABLED` | Workerens AI-spærring virker. Brug appens opdateringsknap og derefter **Søg efter film**; køb ikke kredit eller rotér nøgler. |
 | Gammel samling er ikke synlig | Samme origin og browserprofil, eller eksportér fra den gamle adresse og importér backupen. |
 
 Del fejlstatus og tidspunkt ved fejlfinding. Del ikke adgangsnøgler, session-token, foto-request bodies eller rå udbydersvar.
 
 Hvis alle provideropslag straks giver `PROVIDER_FAILURE`, mens **Test forbindelse** er grøn, skal Workerens kodeversion kontrolleres. Rettelsen fra 7. oktober bruger `redirect: 'manual'` og afviser omdirigeringer sikkert. Den tidligere `redirect: 'error'` blev afvist af den anvendte Workers-runtime, før databasen blev kontaktet. Deploy den rettede Worker med `pnpm worker:deploy`; et nyt app-login eller en frontendopdatering alene ændrer ikke serverkoden. Se [fejl og løsninger](fejl-og-loesninger.md). Safari-data og Nedlukningstilstand skal bevares.
 
-Worker sender kun faste, ufølsomme fejlkoder. Appen angiver, om fejlen kom fra covergenkendelse, stregkodeopslag eller filmopslag. En metadatafejl bevarer den fundne titel, som stadig kan gemmes. Midlertidige AI-fotos bevares kun i hukommelsen, mens kameravinduet er åbent; de bliver ikke gemt i IndexedDB, localStorage eller backup.
+Worker sender kun faste, ufølsomme fejlkoder. Appen angiver, om fejlen kom fra stregkodeopslag eller filmopslag. En metadatafejl bevarer den fundne titel, som stadig kan gemmes. Egne coverfotos ligger i det lokale `coverBlobs`-lager og følger med en filmbackup.
 
 | Fejlkode | Næste trin |
 | --- | --- |
-| `PROVIDER_AUTH` | Kontrollér den pågældende tjenestes adgang i Worker. Et nyt app-login ændrer ikke OpenAI- eller TMDB-adgangen. |
-| `PROVIDER_ACCESS` | Kontrollér providerkontoens rettigheder og, ved covergenkendelse, adgang til modellen i `OPENAI_MODEL`. |
-| `PROVIDER_QUOTA` | Kontrollér [OpenAI-projektets forbrug og saldo](https://platform.openai.com/settings/organization/billing/overview). Nye forsøg hjælper først, når kvoten er tilgængelig igen. |
+| `AI_DISABLED` | Den tidligere cover-AI-adapter er slået fra. Opdatér en gammel frontend, og brug titelsøgning. |
+| `PROVIDER_AUTH` | Kontrollér den pågældende tjenestes adgang i Worker. Et nyt app-login ændrer ikke TMDB-adgangen. |
+| `PROVIDER_ACCESS` | Kontrollér den pågældende providerkontos rettigheder. |
+| `PROVIDER_QUOTA` | Den pågældende providers kvote er afvist. Gentagne forsøg løser ikke kvoten; brug manuel registrering, og køb ikke API-kredit som automatisk fejlfinding. |
 | `PROVIDER_RATE_LIMIT` | Vent den angivne tid, før du prøver igen. |
-| `PROVIDER_TIMEOUT` / `PROVIDER_FAILURE` | Tjenesten svarede ikke i tide eller kunne ikke gennemføre kaldet. Prøv manuelt igen senere. |
+| `PROVIDER_TIMEOUT` / `PROVIDER_FAILURE` | Tjenesten svarede ikke i tide eller kunne ikke gennemføre kaldet. Indtast titlen eller registrér filmen manuelt. |
 | `PROVIDER_REQUEST` / `PROVIDER_RESPONSE` | Kontrollér provideropsætningen. Del kun fejlkode, handling og tidspunkt til fejlfinding. |
-| `AI_INCOMPLETE` / `AI_INVALID_RESULT` | AI gav ikke et færdigt, valideret filmsvar. Prøv igen eller beskær titelområdet. Gentagne fejl kræver kontrol af modelopsætningen. |
-| `AI_REFUSED` | Tag et tydeligt foto af hele filmforsiden. |
+
+## 9. Avanceret og valgfrit: tidligere cover-AI
+
+Dette afsnit beskriver kun den bevarede serveradapter. Den er ikke del af standardflowet eller frontendens filmoprettelse. Den skal forblive deaktiveret under brugerens ønske om ingen flere udgifter. Tidligere liveforsøg gav HTTP 429 uden et genkendelsesresultat; den præcise projektgrænse er ikke bekræftet. Se [F11](fejl-og-loesninger.md#f11) og [F19](fejl-og-loesninger.md#f19) i fejlloggen.
+
+En fremtidig genaktivering kræver et nyt udtrykkeligt ønske, en valgt model med verificeret billed- og schema-understøttelse, passende provideradgang og bevidst accept af eventuelt betalt API-forbrug. Ingen modeladgang eller genkendelsespræcision er lovet her. Bevar `COVER_AI_ENABLED = "false"`, indtil en sådan ændring er ønsket og testet.
+
+Hvis opsætning af den tidligere adapter senere ønskes, findes den udtrykkelige genvej:
+
+```bash
+pnpm worker:setup --with-cover-ai
+```
+
+Flaget tilføjer en interaktiv `OPENAI_API_KEY`-prompt. Det ændrer ikke `COVER_AI_ENABLED`, aktiverer ikke funktionen og køber ikke API-kredit. Secretværdien skal kun indtastes i Wranglers skjulte prompt. En eksisterende OpenAI-secret behøver ikke roteres eller fjernes for standardflowet. Den bevarede adapter anvender `OPENAI_MODEL`; en ændring af denne indstilling kræver ny kontrol i providerens officielle dokumentation.
+
+Kun den præcise streng `COVER_AI_ENABLED = "true"` kan aktivere `/identify-cover` efter en manuel Worker-deploy. En gammel frontend får fortsat `AI_DISABLED`, når flaget er `"false"`, uanset om der allerede findes OpenAI-secrets. Frontendopdatering, nyt app-login og ændring af TMDB-token aktiverer ikke cover-AI.
