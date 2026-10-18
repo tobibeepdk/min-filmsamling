@@ -1,5 +1,6 @@
 // These fixed codes contain no request data or provider error text.
 export const serviceErrors = Object.freeze({
+  AI_DISABLED: 'AI-covergenkendelse er slået fra. Søg efter titel eller scan stregkoden.',
   PROVIDER_AUTH: 'Tjenestens adgang kunne ikke godkendes. Kontrollér tjenestens opsætning.',
   PROVIDER_ACCESS: 'Tjenesten afviste adgangen. Kontrollér kontoens adgang og modelopsætning.',
   PROVIDER_QUOTA:
