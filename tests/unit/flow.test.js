@@ -5,16 +5,22 @@ import { processBarcode } from '../../src/workflow.js';
 import { rankMovies, mergeMovieMetadata } from '../../shared/movie.js';
 import { decideRecognition } from '../../src/cover-ai.js';
 
-describe('filmflow uden manuel titel', () => {
-  it('ukendt 7393834487707 åbner coverkamera og gemmer kladden', async () => {
+describe('filmflow og metadata', () => {
+  it('ukendt 7393834487707 åbner titelsøgning og gemmer kladden uden AI', async () => {
     const db = await openDatabase('unknown-' + crypto.randomUUID());
     const result = await processBarcode(
-      { db, api: { post: async () => ({ found: false }) }, draft: { notes: 'Bevar mig' } },
+      {
+        db,
+        api: { post: async () => ({ found: false }) },
+        draft: { notes: 'Bevar mig', location: 'Reol 2', coverId: 'eget-cover' },
+      },
       '7393834487707',
     );
-    expect(result.next).toBe('cover');
+    expect(result.next).toBe('search');
     expect((await db.get('drafts', 'current')).barcode).toBe('7393834487707');
     expect(result.draft.notes).toBe('Bevar mig');
+    expect(result.draft.location).toBe('Reol 2');
+    expect(result.draft.coverId).toBe('eget-cover');
     db.close();
   });
   it('lokal barcodeMap udfylder straks uden API-kald', async () => {

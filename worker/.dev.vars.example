@@ -1,8 +1,10 @@
 # Copy to worker/.dev.vars locally and enter your own values. Never commit .dev.vars.
-# Empty values fail closed until configured.
-OPENAI_API_KEY=""
+# App access and session signing values are required; empty values fail closed.
 APP_ACCESS_KEY=""
 SESSION_SIGNING_KEY=""
+# Cover AI is disabled by default via COVER_AI_ENABLED="false" in wrangler.toml.
+# Optional OpenAI secret: used only after explicitly setting COVER_AI_ENABLED="true".
+OPENAI_API_KEY=""
 # Optional metadata/provider secrets:
 TMDB_READ_TOKEN=""
 BARCODE_PROVIDER_KEY=""

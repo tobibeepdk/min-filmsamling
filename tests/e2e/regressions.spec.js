@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 // Real service-worker behavior is verified separately; these tests route the Worker API.
 test.use({ serviceWorkers: 'block' });
 
@@ -15,15 +15,6 @@ const movie = {
   source: 'tmdb',
   cover: '',
   score: 1,
-};
-const recognition = {
-  recognized: true,
-  title: 'The Wicked',
-  originalTitle: 'The Wicked',
-  year: 2013,
-  confidence: 0.94,
-  visibleText: ['THE WICKED'],
-  candidates: [{ title: 'The Wicked', year: 2013, confidence: 0.94 }],
 };
 const filmA = {
   id: 'film-a',
@@ -82,7 +73,6 @@ async function setup(page, handlers = {}) {
         expiresAt: new Date(Date.now() + 3600000).toISOString(),
       },
       '/lookup-barcode': { found: false },
-      '/identify-cover': recognition,
       '/search-movie': { configured: true, candidates: [movie], selected: movie },
     };
     const body = handlers[path]
@@ -91,7 +81,7 @@ async function setup(page, handlers = {}) {
     try {
       await route.fulfill({ json: body, headers });
     } catch (error) {
-      // Delayed requests are intentionally aborted by navigation or retaking a photo.
+      // Delayed requests are intentionally aborted by navigation or starting another operation.
       if (!route.request().failure() && !page.isClosed()) throw error;
     }
   });
@@ -170,7 +160,9 @@ async function uploadCover(page) {
     .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(bytes) });
 }
 
-test('kendt stregkode henter filmdata uden titelindtastning og genbruger lokal kobling', async ({ page }) => {
+test('kendt stregkode henter filmdata uden titelindtastning og genbruger lokal kobling', async ({
+  page,
+}) => {
   const treasure = {
     ...movie,
     title: 'National Treasure',
@@ -230,22 +222,21 @@ test('kendt stregkode henter filmdata uden titelindtastning og genbruger lokal k
   expect(searchCalls).toBe(1);
 });
 
-test('et fejlet coveropslag bevarer fotoet og kan prøves igen uden ny titel eller nyt foto', async ({
+test('et fejlet titelopslag kan prøves igen og bevarer eget foto og brugerens felter', async ({
   page,
-}, testInfo) => {
+}) => {
   await setup(page);
   let calls = 0;
-  let firstImage;
-  await page.route(`${worker}/identify-cover`, async (route) => {
+  await page.route(`${worker}/search-movie`, async (route) => {
     if (route.request().method() === 'OPTIONS') return route.fallback();
     calls += 1;
-    const image = route.request().postDataJSON().image;
-    if (calls === 1) firstImage = image;
-    else expect(image).toBe(firstImage);
+    expect(route.request().postDataJSON().title).toBe('The Wicked');
     await route.fulfill({
       status: calls === 1 ? 502 : 200,
       json:
-        calls === 1 ? { error: 'private-provider-detail', code: 'PROVIDER_TIMEOUT' } : recognition,
+        calls === 1
+          ? { error: 'private-provider-detail', code: 'PROVIDER_TIMEOUT' }
+          : { configured: true, candidates: [movie], selected: movie },
       headers: { 'Access-Control-Allow-Origin': new URL(page.url()).origin },
     });
   });
@@ -253,16 +244,18 @@ test('et fejlet coveropslag bevarer fotoet og kan prøves igen uden ny titel ell
   await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
   await page.getByLabel('Noter').fill('Bevar mine noter efter fejlen');
   await page.getByLabel('Placering').fill('Reol ved sofaen');
-  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
+  await page.getByRole('button', { name: 'Tag eget coverfoto', exact: true }).click();
   await uploadCover(page);
-  const dialog = page.getByRole('dialog', { name: 'Find film fra cover', exact: true });
-  await expect(dialog).toContainText('PROVIDER_TIMEOUT');
-  await expect(dialog).not.toContainText('private-provider-detail');
-  await expect(dialog.getByAltText('Dit coverfoto')).toBeVisible();
-  await expect(dialog.getByLabel('Coverkamera')).not.toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Tag billede', exact: true })).not.toBeVisible();
-  await dialog.screenshot({ path: testInfo.outputPath('cover-retry.png') });
-  await dialog.getByRole('button', { name: 'Prøv analysen igen', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const coverId = (await records(page)).drafts.find((draft) => draft.id === 'new').coverId;
+  await page.getByRole('button', { name: 'Søg efter film', exact: true }).click();
+  const search = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await search.getByLabel('Filmtitel', { exact: true }).fill('The Wicked');
+  await search.getByRole('button', { name: 'Søg', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('PROVIDER_TIMEOUT');
+  await expect(page.getByRole('status')).not.toContainText('private-provider-detail');
+  await expect(page.locator('.cover-editor img')).toBeVisible();
+  await page.getByRole('button', { name: 'Hent filmoplysninger', exact: true }).click();
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
   await expect(page.getByLabel('Instruktør')).toHaveValue('Peter Winther');
   await expect(page.getByLabel('Noter')).toHaveValue('Bevar mine noter efter fejlen');
@@ -272,17 +265,19 @@ test('et fejlet coveropslag bevarer fotoet og kan prøves igen uden ny titel ell
     title: 'The Wicked',
     notes: 'Bevar mine noter efter fejlen',
     location: 'Reol ved sofaen',
+    coverId,
+    coverSource: 'own',
   });
 });
 
-test('et forsinket genforsøg kan annulleres med nyt foto uden at ændre den nyere kladde', async ({
+test('et forsinket genforsøg kan afbrydes af en ny titelsøgning uden at ændre den nyere kladde', async ({
   page,
 }) => {
   await setup(page);
   const requested = deferred();
   const release = deferred();
   let calls = 0;
-  await page.route(`${worker}/identify-cover`, async (route) => {
+  await page.route(`${worker}/search-movie`, async (route) => {
     if (route.request().method() === 'OPTIONS') return route.fallback();
     calls += 1;
     const ownCall = calls;
@@ -293,7 +288,10 @@ test('et forsinket genforsøg kan annulleres med nyt foto uden at ændre den nye
     try {
       await route.fulfill({
         status: ownCall === 1 ? 502 : 200,
-        json: ownCall === 1 ? { code: 'PROVIDER_TIMEOUT' } : recognition,
+        json:
+          ownCall === 1
+            ? { code: 'PROVIDER_TIMEOUT' }
+            : { configured: true, candidates: [movie], selected: movie },
         headers: { 'Access-Control-Allow-Origin': new URL(page.url()).origin },
       });
     } catch (error) {
@@ -303,21 +301,24 @@ test('et forsinket genforsøg kan annulleres med nyt foto uden at ændre den nye
   await login(page);
   await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
   await page.getByLabel('Noter').fill('Noten må ikke mistes ved genforsøg');
-  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
-  await uploadCover(page);
-  await page.getByRole('button', { name: 'Prøv analysen igen', exact: true }).click();
+  await page.getByLabel('Titel', { exact: true }).fill('Første søgetitel');
+  await page.getByRole('button', { name: 'Hent filmoplysninger', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('PROVIDER_TIMEOUT');
+  await page.getByRole('button', { name: 'Hent filmoplysninger', exact: true }).click();
   await requested.promise;
   const cancelled = page.waitForEvent('requestfailed', {
-    predicate: (request) => request.url() === `${worker}/identify-cover`,
+    predicate: (request) => request.url() === `${worker}/search-movie`,
   });
-  await page.getByRole('button', { name: 'Tag nyt billede', exact: true }).click();
+  await page.getByLabel('Titel', { exact: true }).fill('Nyere søgetitel');
+  await page.getByRole('button', { name: 'Søg efter film', exact: true }).click();
   await cancelled;
   release.resolve();
-  await expect(
-    page.getByRole('dialog', { name: 'Find film fra cover', exact: true }),
-  ).toBeVisible();
-  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('');
-  await uploadCover(page);
+  const search = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await expect(search).toBeVisible();
+  await expect(search.getByLabel('Filmtitel', { exact: true })).toHaveValue('Nyere søgetitel');
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Nyere søgetitel');
+  await search.getByLabel('Filmtitel', { exact: true }).fill('The Wicked');
+  await search.getByRole('button', { name: 'Søg', exact: true }).click();
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
   await expect(page.getByLabel('Noter')).toHaveValue('Noten må ikke mistes ved genforsøg');
 });
@@ -326,8 +327,9 @@ test('et utilgængeligt livekamera viser foto-reserven uden et sort kamerafelt',
   page,
 }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Find film fra cover', exact: true });
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByRole('button', { name: 'Tag eget coverfoto', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Eget coverfoto', exact: true });
   await expect(dialog).toContainText('Brug fotoknappen');
   await expect(dialog.getByLabel('Coverkamera')).not.toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Tag billede', exact: true })).not.toBeVisible();
@@ -354,8 +356,9 @@ test('et forsinket kamera efter et ugyldigt foto efterlader ingen sort kamerafla
           });
       });
   });
-  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Find film fra cover', exact: true });
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByRole('button', { name: 'Tag eget coverfoto', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Eget coverfoto', exact: true });
   await dialog.getByLabel('Tag eller vælg coverfoto').setInputFiles({
     name: 'invalid.txt',
     mimeType: 'text/plain',
@@ -369,7 +372,7 @@ test('et forsinket kamera efter et ugyldigt foto efterlader ingen sort kamerafla
   await expect(dialog.getByLabel('Tag eller vælg coverfoto')).toBeVisible();
 });
 
-for (const source of ['stregkode', 'cover']) {
+for (const source of ['stregkode', 'titelsøgning']) {
   test(`metadatafejl efter ${source} vises og bevarer den fundne titel og brugerens noter`, async ({
     page,
   }) => {
@@ -392,9 +395,11 @@ for (const source of ['stregkode', 'cover']) {
     await login(page);
     await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
     await page.getByLabel('Noter').fill('Bevar trods metadatafejl');
-    if (source === 'cover') {
-      await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
-      await uploadCover(page);
+    if (source === 'titelsøgning') {
+      await page.getByRole('button', { name: 'Søg efter film', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+      await dialog.getByLabel('Filmtitel', { exact: true }).fill('The Wicked');
+      await dialog.getByRole('button', { name: 'Søg', exact: true }).click();
     } else {
       await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
       await page.getByLabel('Stregkodenummer').fill('7393834487707');
@@ -492,7 +497,7 @@ test('en ny kladde gendannes efter redigering og gemning af en eksisterende film
   await expect(page.getByRole('heading', { name: 'Tilføj film', exact: true })).toBeVisible();
 });
 
-for (const action of ['Find film fra cover', 'Hent filmoplysninger']) {
+for (const action of ['Søg efter film', 'Hent filmoplysninger']) {
   test(`navigation afviser ${action} mens handlingens kladdelagring er i gang`, async ({
     page,
   }) => {
@@ -563,41 +568,36 @@ test('noter og placering skrevet under filmopslag bevares, når svaret ankommer'
   });
 });
 
-test('et gammelt coversvar lukker ikke kameraet efter Tag nyt billede', async ({ page }) => {
+test('et gammelt filmsvar lukker ikke et nyere lokalt coverkamera', async ({ page }) => {
   const requested = deferred();
   const release = deferred();
-  let coverCalls = 0;
   await setup(page, {
-    '/identify-cover': async () => {
-      coverCalls += 1;
-      if (coverCalls === 1) {
-        requested.resolve();
-        await release.promise;
-      }
-      return recognition;
+    '/search-movie': async () => {
+      requested.resolve();
+      await release.promise;
+      return { configured: true, candidates: [movie], selected: movie };
     },
   });
   await login(page);
   await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByLabel('Titel', { exact: true }).fill('Min manuelt rettede titel');
   await page.getByLabel('Noter').fill('Bevar ved nyt foto');
-  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
-  await uploadCover(page);
+  await page.getByRole('button', { name: 'Hent filmoplysninger', exact: true }).click();
   await requested.promise;
   const cancelled = page.waitForEvent('requestfailed', {
-    predicate: (request) => request.url() === `${worker}/identify-cover`,
+    predicate: (request) => request.url() === `${worker}/search-movie`,
   });
-  await page.getByRole('button', { name: 'Tag nyt billede', exact: true }).click();
+  await page.getByRole('button', { name: 'Tag eget coverfoto', exact: true }).click();
   await cancelled;
   release.resolve();
-  await expect(
-    page.getByRole('dialog', { name: 'Find film fra cover', exact: true }),
-  ).toBeVisible();
-  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('dialog', { name: 'Eget coverfoto', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Min manuelt rettede titel');
   await uploadCover(page);
-  await expect(page.getByLabel('Instruktør')).toHaveValue('Peter Winther');
-  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Min manuelt rettede titel');
+  await expect(page.getByLabel('Instruktør')).toHaveValue('');
   await expect(page.getByLabel('Noter')).toHaveValue('Bevar ved nyt foto');
-  expect(coverCalls).toBe(2);
+  await expect(page.locator('.cover-editor img')).toBeVisible();
 });
 
 test('navigation til samlingen under et opslag bevarer film og tilføjelseskladde', async ({
@@ -640,51 +640,55 @@ test('navigation til samlingen under et opslag bevarer film og tilføjelseskladd
   await expect(page.getByLabel('Noter')).toHaveValue('Bevar denne tilføjelseskladde');
 });
 
-test('lav cover-confidence kan forbedres med beskæring uden at miste noter', async ({ page }) => {
-  const images = [];
+test('usikker titelsøgning kan præciseres med år uden at miste noter eller eget cover', async ({
+  page,
+}) => {
+  const searches = [];
   await setup(page, {
-    '/identify-cover': (request) => {
-      images.push(request.postDataJSON().image);
-      return images.length === 1
+    '/search-movie': (request) => {
+      searches.push(request.postDataJSON());
+      return searches.length === 1
         ? {
-            ...recognition,
-            confidence: 0.6,
+            configured: true,
+            selected: null,
             candidates: [
-              { title: 'The Wicked', year: 2013, confidence: 0.6 },
-              { title: 'Wicked', year: 2024, confidence: 0.4 },
+              { ...movie, score: 0.76 },
+              { ...movie, title: 'Wicked', year: 2024, score: 0.74 },
             ],
           }
-        : recognition;
+        : { configured: true, candidates: [movie], selected: movie };
     },
   });
   await login(page);
   await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
-  await page.getByLabel('Noter').fill('Note før beskæring');
-  await page.getByRole('button', { name: 'Find film fra cover', exact: true }).click();
+  await page.getByLabel('Noter').fill('Note før præcisering');
+  await page.getByRole('button', { name: 'Tag eget coverfoto', exact: true }).click();
   await uploadCover(page);
-  await page.getByRole('button', { name: 'Beskær titelområdet og prøv igen', exact: true }).click();
-  await expect(
-    page.getByRole('dialog', { name: 'Beskær titelområdet', exact: true }),
-  ).toBeVisible();
-  for (const [label, value] of [
-    ['Venstre', 10],
-    ['Højre', 90],
-    ['Top', 20],
-    ['Bund', 80],
-  ]) {
-    const slider = page.getByRole('slider', { name: label, exact: true });
-    await expect(slider).toBeVisible();
-    await slider.evaluate((input, value) => {
-      input.value = String(value);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    }, value);
-  }
-  await page.getByRole('button', { name: 'Beskær og prøv igen', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const coverId = (await records(page)).drafts.find((draft) => draft.id === 'new').coverId;
+  await page.getByRole('button', { name: 'Søg efter film', exact: true }).click();
+  let search = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await search.getByLabel('Filmtitel', { exact: true }).fill('Wicked');
+  await search.getByRole('button', { name: 'Søg', exact: true }).click();
+  const choices = page.getByRole('dialog', { name: 'Vælg den rigtige film', exact: true });
+  await expect(choices.getByRole('button', { name: 'Wicked · 2024', exact: true })).toBeVisible();
+  await choices.getByRole('button', { name: 'Annuller – behold kladden', exact: true }).click();
+  await page.getByRole('button', { name: 'Søg efter film', exact: true }).click();
+  search = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await search.getByLabel('Filmtitel', { exact: true }).fill('The Wicked');
+  await search.getByLabel('År (valgfrit)', { exact: true }).fill('2013');
+  await search.getByRole('button', { name: 'Søg', exact: true }).click();
   await expect(page.getByLabel('Instruktør')).toHaveValue('Peter Winther');
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
-  await expect(page.getByLabel('Noter')).toHaveValue('Note før beskæring');
-  expect(images).toHaveLength(2);
-  expect(images[0]).toMatch(/^data:image\/jpeg;base64,/);
-  expect(images[1]).toMatch(/^data:image\/jpeg;base64,/);
-  expect(images[1]).not.toBe(images[0]);
+  await expect(page.getByLabel('Noter')).toHaveValue('Note før præcisering');
+  await expect(page.locator('.cover-editor img')).toBeVisible();
+  expect((await records(page)).drafts.find((draft) => draft.id === 'new')).toMatchObject({
+    coverId,
+    coverSource: 'own',
+    notes: 'Note før præcisering',
+  });
+  expect(searches).toEqual([
+    { title: 'Wicked', originalTitle: '', year: null },
+    { title: 'The Wicked', originalTitle: '', year: 2013 },
+  ]);
 });

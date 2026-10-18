@@ -14,6 +14,8 @@
 
 ## Secrets og API'er
 
+- Standardflowet må ikke bruge betalt cover-AI. Bevar `COVER_AI_ENABLED = "false"`; kun den præcise streng `"true"` må aktivere den tidligere `/identify-cover`-adapter. Deaktiverede kald skal give `AI_DISABLED` før providerkontakt, også fra ældre frontends.
+- Login må kun kræve `APP_ACCESS_KEY`, `SESSION_SIGNING_KEY` og limiter-bindingen, ikke OpenAI-nøgle eller model. Eksisterende OpenAI-secrets kan blive liggende ubrugt. Ingen køb, rotation eller live AI-forsøg uden brugerens nye udtrykkelige ønske.
 - Providersecrets og session-signering ligger kun i Worker-secrets. Ingen rigtige nøgler eller tokenværdier i frontend, `VITE_`-variabler, source, git-historik, backups eller logs.
 - Appens adgangsnøgle må kun bruges til login; gem kun kortlivet token og udløbstid i `session`-store.
 - Bevar præcis Origin-validering, autentificering, requeststørrelsesgrænser, upstream-validering og persistent global rate limiting. Produktionsorigin er `https://tobibeepdk.github.io`, uden sti eller afsluttende skråstreg.
@@ -29,7 +31,8 @@
 - Migrér ældre localStorage-data atomisk og verificér felter og coverbytes før færdigmarkering og cleanup af gamle settings-secrets. Fjern aldrig den gamle filmsamling eller kladde som del af migrationen.
 - Valider hele en backup før en atomisk merge. Backup allowlister filmfelter og tilknyttede covers; settings, sessioner og kladder udelades. Bevar eksisterende film-ID'er ved import.
 - Gem kladder automatisk. Annullering og overlappende kamera-/API-kald må ikke overskrive nyere brugerinput.
-- Bevar stregkodernes kontrolciffervalidering og normalisering. Ukendte koder giver manuel/foto-reserve; opfind ikke en filmtitel.
+- Bevar stregkodernes kontrolciffervalidering og normalisering. Ukendte koder og providerfejl giver titelsøgning med valgfrit årstal; opfind ikke en filmtitel eller lov gratis covergenkendelse. Kendte koder og lokale koblinger bruger fortsat automatisk opslag.
+- Egne coverfotos komprimeres og gemmes lokalt uden AI-upload. Metadata må ikke overskrive dem.
 - Billedbehandling skal anvende EXIF-retning, fjerne metadata og overholde de aftalte størrelsegrænser.
 - Service worker cacher statiske appfiler, aldrig API-svar. Opdatering aktiveres af brugeren og bevarer IndexedDB-data.
 

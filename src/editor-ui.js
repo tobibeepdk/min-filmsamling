@@ -33,7 +33,7 @@ export function renderEditor(draft, actions) {
       'div',
       { class: 'actions capture-actions' },
       button([icon('barcode'), 'Scan stregkode'], actions.scan),
-      button([icon('camera'), 'Find film fra cover'], actions.cover, { class: 'primary' }),
+      button([icon('search'), 'Søg efter film'], actions.search, { class: 'primary' }),
     ),
     el(
       'div',

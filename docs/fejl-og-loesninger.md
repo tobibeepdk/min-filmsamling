@@ -1,6 +1,8 @@
 # Fejl, udfordringer og afprøvede løsninger
 
-Denne genbrugelige oversigt samler erfaringerne frem til 12. oktober 2026. Slå symptomet op før nye forsøg; versioner, kontogrænser og runtimes skal revalideres, når miljøet ændrer sig. Den tilhørende [JSON-fil](fejl-og-loesninger.json) har samme poster til maskinopslag.
+Denne genbrugelige oversigt samler erfaringerne frem til 18. oktober 2026. Slå symptomet op før nye forsøg; versioner, kontogrænser og runtimes skal revalideres, når miljøet ændrer sig. Den tilhørende [JSON-fil](fejl-og-loesninger.json) har samme poster til maskinopslag.
+
+Den nye standard uden betalt cover-AI beskrives i [F19](#f19). F02, F03, F06 og F08 bevarer tidligere adfærd og testbevis; de er ikke en vejledning til at genaktivere cover-AI. F11 dokumenterer en fortsat uafklaret providergrænse, som standardflowet nu går uden om.
 
 Løsninger markeret **mocktestet** er implementeret og testet med mocks; de beviser ikke fysisk iPhone-kamera eller live AI-præcision. **Uafklaret** angiver manglende årsagsbevis. Brugerens ønske om ingen flere udgifter gælder fortsat: køb ikke API-kredit eller foretag yderligere betalte OpenAI-forsøg som automatisk fejlsøgning.
 
@@ -24,6 +26,7 @@ Løsninger markeret **mocktestet** er implementeret og testet med mocks; de bevi
 | [F16](#f16) | Testværktøj stopper før assertions eller fejler på typeantagelse | Løst |
 | [F17](#f17) | Browserstyring viser gammel tilstand eller forkert loginfane | Håndteret |
 | [F18](#f18) | Grøn health eller mocktest bliver forvekslet med livebevis | Forebyggelse og testdækning |
+| [F19](#f19) | Appen skal bruges uden betalt cover-AI | Implementeret og automatisk verificeret |
 
 Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9d00077`, tree `f7d64bcea1fa3b38a10b26a91b1f813674b1fcd3`. [Main-CI og Pages](https://github.com/tobibeepdk/min-filmsamling/actions/runs/38296925440) bestod med 227 enhedstests, 52 E2E-tests, lint, build og 0 secret-fund. Worker-version `11cb2ef0-bee3-42b8-8eaf-49fd2e52dd3f` var aktiv på 100 %. Dette er et historisk kontrolpunkt, ikke automatisk bevis for en senere version.
 
@@ -51,6 +54,8 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 
 ## F02. OCR læser stiliseret covertekst forkert
 
+**Aktuel anvendelse fra 18. oktober:** Dette er historisk AI-adfærd. Standardflowet bruger nu titelsøgning og egne lokale coverfotos; se F19. Genaktiver ikke AI som en automatisk løsning på en ukendt kode.
+
 **Status:** Implementeret og mocktestet.
 
 **Symptom:** Tidligere OCR gav meningsløs tekst for coveret The Wicked.
@@ -70,6 +75,8 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 <a id="f03"></a>
 
 ## F03. Ukendt stregkode giver ingen filmtitel
+
+**Aktuel anvendelse fra 18. oktober:** Coverkamera som automatisk reserve er historisk. Den nye standard åbner titelsøgning med valgfrit årstal ved ukendt kode eller providerfejl; se F19. Det tidligere testantal nedenfor dokumenterer den tidligere version.
 
 **Status:** Implementeret og mocktestet.
 
@@ -131,6 +138,8 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 
 ## F06. Sort kamerafelt eller mistet cover efter fejl
 
+**Aktuel anvendelse fra 18. oktober:** Beskrivelsen af AI-genforsøg og midlertidige AI-fotos er historisk. Egne coverfotos skal nu komprimeres og gemmes lokalt uden AI-upload; kamerastreams og annullering skal fortsat håndteres sikkert. Se F19 for ny teststatus.
+
 **Status:** Implementeret og mocktestet.
 
 **Symptom:** Et stoppet/utilgængeligt kamera kunne efterlade sort video og en aktiv billedknap. Et fejlet opslag krævede tidligere et nyt foto.
@@ -170,6 +179,8 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 <a id="f08"></a>
 
 ## F08. Login virker på iPhone, men ikke i testfanen
+
+**Aktuel anvendelse fra 18. oktober:** Den citerede besked om AI nedenfor stammer fra den tidligere frontend. Login må nu virke uden OpenAI-nøgle og model; se F19. Det oprindelige loginbevis og den uafklarede første afvisning bevares.
 
 **Status:** Løst og liveverificeret.
 
@@ -230,6 +241,8 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 <a id="f11"></a>
 
 ## F11. Cover-AI afvises med HTTP 429; ingen flere udgifter
+
+**Aktuel anvendelse fra 18. oktober:** Provideradgangen er ikke repareret eller genafprøvet. F19 deaktiverer i stedet cover-AI som standard og lader appen bruge manuel titelsøgning. Køb, nye nøgler og flere betalte liveforsøg er fortsat fravalgt.
 
 **Status:** Fortsat blokeret.
 
@@ -347,6 +360,20 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 
 **Kilder:** min-filmsamling-cover-levering.md; min-filmsamling-slutrapport-20261012.md.
 
+### Ny testværktøjsfejl, 18. oktober 2026: WebKit-context afviser Blob i IndexedDB
+
+**Status:** Årsagen er afgrænset til den testede WebKit-context. Persistent testcontext er afprøvet som løsning, og den samlede E2E-kørsel med den nye fixture består med 62/62 cases.
+
+**Symptom:** Playwrights WebKit 26.6 i en ephemeral context afviser lagring af syntetiske `Blob`-værdier i IndexedDB med `UnknownError` og “Error preparing Blob/File data to be stored in object store”. Den isolerede diagnose indlæser ingen appkode. Både tekst-Blob, canvas-JPEG-Blob og en JPEG-Blob genopbygget fra bytes fejler; et almindeligt objekt og `Uint8Array` kan gemmes. Chromium 153.0.8010.12 består alle fem cases med samme testopsætning.
+
+**Årsag og sikkerhed:** De tre Blob-typer fejler også med `TMPDIR=/private/tmp`, så den prøvede TMPDIR-ændring løser ikke problemet. En frisk `launchPersistentContext` består alle fem cases i begge browsere. Dette afgrænser problemet til browser-/context-opsætningen i denne diagnose; det dokumenterer ikke en fejl i appens lagerformat eller fysisk Safaris privattilstand. WebKits offentlige [IDBTransaction.cpp](https://raw.githubusercontent.com/WebKit/WebKit/main/Source/WebCore/Modules/indexeddb/IDBTransaction.cpp) viser, at Blob-lagring i `putOrAddOnServer` anvender `isEphemeral`, og har en tilsvarende fejlgren ved forberedelse af Blob-data. Kilden er støtte for diagnosen, ikke et selvstændigt årsagsbevis for den installerede WebKit-build.
+
+**Afprøvet løsning:** Brug en unik persistent profil pr. WebKit-test i Playwright-fixturen. Bevar iPhone-viewport, emulering og provider-/kameramocks, og luk context samt ryd testprofilen efter testen. Den friske persistent probe gemmer og genlæser faktiske Blob-objekter med forventet byteantal: 23 bytes tekst samt 1867 bytes for begge JPEG-varianter i WebKit; 23 og 1128 bytes i Chromium. Der er ikke ændret produktionslager eller billedformat som del af denne løsning.
+
+**Forebyggelse:** Ved gentagelse køres en lille appuafhængig Blob→IndexedDB-roundtrip i både ephemeral og frisk persistent context før ændringer i appkode. Genbrug den fungerende persistent fixture, og test isolationen mellem profiler. Skift ikke coverlager til byteformat som reaktion på denne testværktøjsfejl. Fysisk iPhone-kamera, fysisk Safaris privattilstand og liveprovideradgang kræver særskilt bevis.
+
+**Bevis og testscope:** Default og TMPDIR-prober: WebKit 2/5 samlet, med fejl i 3/3 Blob-cases; Chromium 5/5. Persistent probe: 5/5 i begge browsere med faktiske Blob-roundtrips. Filerne er `/private/tmp/min-filmsamling-webkit-blob-probe-20261018-fresh-default.json`, `/private/tmp/min-filmsamling-webkit-blob-probe-20261018-fresh-tmpdir.json` og `/private/tmp/min-filmsamling-webkit-blob-probe-20261018-fresh-persistent.json`. De isolerede prober beviser alene browseradfærden. Den efterfølgende samlede app-E2E-kørsel består med 62/62 cases på 1,2 minutter: 31 i WebKit med unik persistent profil og 31 i Chromium. Kørselen omfatter reel JPEG→IndexedDB→reload samt offline service worker; se F19.
+
 <a id="f17"></a>
 
 ## F17. Browserstyring viser gammel tilstand eller forkert loginfane
@@ -386,6 +413,26 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 **Sikkerhed:** Secrets forbliver i Worker. Ingen providertekst, billeder, nøgler eller persondata i huskenoter eller testlogs.
 
 **Kilder:** min-filmsamling-slutrapport-20261012.md; min-filmsamling-kontroloutput-20261012.log.
+
+<a id="f19"></a>
+
+## F19. Appen skal bruges uden betalt cover-AI
+
+**Status:** Implementeret og automatisk verificeret. Arbejdsgren: `codex/no-paid-ai`, base-commit `0f2f55926ca5823c41dec747d6a8b23b83efe668`, 18. oktober 2026. Testbeviset gælder arbejdsgrenens kilde; produktionsversion og Pages-bevis registreres særskilt i leveringsrapporten efter udgivelse.
+
+**Symptom:** Brugeren vil bruge appen uden flere udgifter til AI. Den tidligere reserve for en ukendt stregkode krævede et AI-kald, mens live cover-AI gav HTTP 429 uden genkendelsesresultat.
+
+**Årsag:** Automatisk identifikation fra et cover var koblet til en betalt provider. Den tidligere 429-årsag er ikke endeligt fastslået; et fravalg af funktionen er ikke en reparation af providerkontoen.
+
+**Løsning eller næste sikre trin:** Standardkonfigurationen bruger `COVER_AI_ENABLED = "false"`. `/identify-cover` skal svare `AI_DISABLED` før providerkontakt, også fra en ældre app. Kun den præcise streng `"true"` må aktivere den bevarede adapter. Login skal kun kræve appadgangsnøgle, session-signering og limiter-bindingen. Forside og editor bruger **Søg efter film**. Ukendt stregkode eller providerfejl åbner **Filmtitel** og valgfrit årstal til TMDB-søgning; kendte koder og lokale koblinger fortsætter automatisk. **Tag eget coverfoto** komprimerer og gemmer billedet lokalt uden AI-upload. Standardgenvejen til secrets skal kun bede om appadgang og signering samt tilbyde TMDB; `--with-cover-ai` er et særskilt valgfrit promptflag og aktiverer ikke funktionen.
+
+**Forebyggelse:** Test med OpenAI-secrets til stede, at deaktiverede coverkald ikke laver et outbound-kald. Test også manglende, boolske og fejlstavede flagværdier samt login uden OpenAI-konfiguration. Dæk ukendt kode, providerfejl, TMDB-kandidater, annullering, forældede svar, lokal stregkodegenbrug og lokalt coverfoto. Bevar CORS, autentificering, størrelsesgrænser, Durable Object-grænser, migrationshistorik og backupdata. Søg efter en mocked ukendt kode; `7393834487707` er tidligere livefundet og beviser ikke denne reserve.
+
+**Bevis og testscope:** Node.js `24.19.0` og pnpm `11.19.0`. `pnpm test` består med 240 enhedstests i 12 filer på 5,40 sekunder; den endelige fulde `pnpm lint` slutter med exit 0; `pnpm build` består på 992 ms med build-id `c4b1eb813c6930e4`. `pnpm test:e2e` består med 62/62 cases, exit 0, på 1,2 minutter: 31 i WebKit med unik persistent profil og 31 i Chromium. Kørselen omfatter reel JPEG→IndexedDB→reload og offline service worker; kamera og providers er mocked. Den endelige `pnpm security` kontrollerer 78 filer og 84 git-commits med 0 secret-fund. Browser-buildet indeholder ingen servernøgler eller direkte OpenAI-kald. Se F16 for den særskilte appuafhængige Blob-diagnose. Der er ikke dokumenteret deployment eller et gennemspillet produktionsflow for denne ændring her. Worker- og Pages-versioner samt produktionsbevis registreres særskilt i leveringsrapporten efter udgivelse. Fysisk iPhone-kamera, fysisk Safaris privattilstand og liveprovideradgang må ikke udledes af mocks.
+
+**Sikkerhed:** Ingen AI-kald, API-kreditkøb, nye OpenAI-secrets eller secretrotation som led i ændringen. Gamle OpenAI-secrets kan blive liggende ubrugt. Serverens spærring gælder først, når den nye Worker er udgivet; en frontendopdatering alene ændrer ikke den gamle Worker. Der loves ingen gratis automatisk covergenkendelse og ingen nulpris for eksisterende Cloudflare- eller providerplaner. Film, kladder, egne covers, noter, placering, favoritter og set-status skal bevares.
+
+**Kilder:** Brugerens ønske “Gør appen klar uden betalt AI”; `worker/wrangler.toml`; `worker/src/index.js`; `src/app.js`; `scripts/setup-worker-secrets.sh`; `docs/OPSÆTNING-DANSK.md`. Endelige filnavne og resultater kontrolleres ved slutverifikation.
 
 ## Fremgangsmåde næste gang
 

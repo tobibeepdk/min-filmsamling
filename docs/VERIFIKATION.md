@@ -1,5 +1,53 @@
 # Implementering og verifikation
 
+## Standard uden betalt cover-AI – 18. oktober 2026
+
+Den aktuelle ændring erstatter covergenkendelse med **Søg efter film**: titel og valgfrit årstal bruges til TMDB-opslag og kandidatvalg. Ukendt stregkode eller providerfejl åbner søgningen. Kendte koder og lokale stregkodekoblinger udfylder fortsat automatisk. Egne coverfotos komprimeres og gemmes lokalt uden AI-upload. Ved ukendte koder kræves titelindtastning; appen lover ikke gratis billedgenkendelse.
+
+Worker afviser `/identify-cover` med `AI_DISABLED`, medmindre `COVER_AI_ENABLED` er præcis strengen `"true"`. Standardkonfigurationen er `"false"`, også når der allerede findes en OpenAI-secret. Login, stregkode og metadata kræver ikke OpenAI-nøgle eller model. CORS, autentificering, requestgrænser, providertransport, Durable Object-binding og migration `v1` er bevaret. Ingen databaseændring, secretrotation, nye afhængigheder eller API-kreditkøb.
+
+Ændrede filer: `src/app.js`, `src/api.js`, `src/movie-search.js`, `src/workflow.js`, `src/library-ui.js`, `src/editor-ui.js`, `src/settings-ui.js`, `shared/service-errors.js`, `worker/src/index.js`, `worker/src/security.js`, `worker/wrangler.toml`, `worker/.dev.vars.example`, `scripts/setup-worker-secrets.sh`, tre enhedstestfiler, fire E2E-/fixturefiler, `AGENTS.md`, `README.md`, den danske opsætningsvejledning, fejlloggen i Markdown/JSON og denne rapport.
+
+Kontrollerne bruger Node.js **24.19.0**, pnpm **11.19.0** og branch `codex/no-paid-ai`, baseret på main `0f2f55926ca5823c41dec747d6a8b23b83efe668`. En identisk kildekopi med de samme låste pakker under `/private/tmp` undgår det lokale filadgangsproblem beskrevet i F15. Faktisk output:
+
+```text
+pnpm test
+Test Files  12 passed (12)
+     Tests  240 passed (240)
+  Duration  5.40s
+
+pnpm lint
+$ eslint src shared worker/src scripts tests *.js --no-warn-ignored
+[exit 0; ingen lintfejl]
+
+pnpm build
+✓ 249 modules transformed.
+✓ built in 992ms
+Service worker c4b1eb813c6930e4: 11 lokale filer; ingen API-cache.
+
+pnpm security
+Sikkerhed: 78 filer + 84 git-commits kontrolleret; 0 secret-fund.
+Browser-build: ingen servernøgler eller direkte OpenAI-kald.
+
+FILMSAMLING_TEST_PORT=4197 pnpm test:e2e
+Running 62 tests using 1 worker
+62 passed (1.2m)
+
+wrangler deploy --dry-run --config worker/wrangler.toml
+Total Upload: 33.10 KiB / gzip: 10.32 KiB
+env.COVER_AI_ENABLED ("false")
+--dry-run: exiting now.
+[exit 0]
+```
+
+En særskilt rekursiv `rg`-kontrol af `dist` fandt ingen servernøgler eller direkte OpenAI-adresser. En dry-run er ikke et produktionsdeploy. Pages skal udgives fra `main` efter CI, og Worker skal udgives særskilt; de konkrete produktionsversioner kontrolleres derefter og registreres i leveringsrapporten.
+
+Før ændringen fejlede de nye regressioner på manglende titelsøgning, afhængigheden af OpenAI-konfiguration ved login og uønsket providerkontakt fra den deaktiverede AI-route. De består efter ændringen. Mock-tests dækker også noter, placering, eget cover, annullering, forældede svar og lokal genbrug af stregkoder.
+
+Den første E2E-kørsel havde seks WebKit-fejl ved Blob-lagring. En minimal test uden appkode reproducerede fejlen i WebKits ephemeral context; samme Blob-roundtrips bestod med en frisk, vedvarende profil. Testfixturen bruger derfor en ny isoleret WebKit-profil pr. test, mens assertions og produktionslager er uændrede. Se [F16](fejl-og-loesninger.md#f16) for diagnose og bevis. Fysisk iPhone-kamera, Safari privattilstand og liveprovideradgang er ikke verificeret af disse tests. Der er ikke foretaget OpenAI-kald.
+
+Afsnittene nedenfor er historiske kontrolpunkter. De beskriver også det tidligere AI-flow og må ikke forveksles med standardflowet ovenfor.
+
 ## TMDB-opslag efter stregkode – 12. oktober 2026
 
 Rensning af kendte produktangivelser bruges nu både ved stregkodeopslag og ved søgning fra gamle kladder. EAN `7393834487707` gav i den offentlige stregkodedatabase titlen `National Treasure - Scandinavian Edition.`. Den rå titel fandt ingen TMDB-film, mens en kontrolleret søgning efter `National Treasure` i den udgivne app hentede titel, originaltitel, år `2004`, handling, genre, instruktør, skuespillere, spilletid og et indlæst onlineomslag. Denne live diagnose skete efter ejerens sikre TMDB-tokenopsætning og før udgivelsen af den nye titelrensning. Et fysisk iPhone-kamera blev ikke brugt til diagnosen.

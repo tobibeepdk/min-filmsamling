@@ -27,7 +27,7 @@ export function renderSettings(settings, actions) {
     el(
       'p',
       { class: 'muted' },
-      'Film og kladder gemmes på denne enhed. AI og filmopslag kræver din Worker og en kortvarig session.',
+      'Film, kladder og egne coverfotos gemmes på denne enhed. Stregkode- og filmopslag kræver din Worker og login. Appen bruger ikke betalt AI.',
     ),
     el(
       'section',

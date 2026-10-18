@@ -64,6 +64,7 @@ function environment(overrides = {}) {
     ALLOWED_ORIGIN: origin,
     APP_ACCESS_KEY: 'test-only-access',
     SESSION_SIGNING_KEY: 'test-only-signing-secret-with-enough-length',
+    COVER_AI_ENABLED: 'true',
     OPENAI_API_KEY: 'test-only-openai',
     OPENAI_MODEL: 'test-vision-model',
     DAILY_LIMIT: '100',
@@ -267,13 +268,7 @@ describe('Worker ingress and sessions', () => {
     expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThan(0);
   });
   test('fails closed when required environment configuration is missing', async () => {
-    for (const field of [
-      'APP_ACCESS_KEY',
-      'SESSION_SIGNING_KEY',
-      'OPENAI_MODEL',
-      'OPENAI_API_KEY',
-      'RATE_LIMITER',
-    ]) {
+    for (const field of ['APP_ACCESS_KEY', 'SESSION_SIGNING_KEY', 'RATE_LIMITER']) {
       const { env } = environment();
       delete env[field];
       const response = await worker.fetch(
@@ -319,6 +314,126 @@ describe('Worker ingress and sessions', () => {
     });
     expect((await worker.fetch(streamed, env)).status).toBe(413);
     expect(cancelled).toBe(true);
+  });
+});
+describe('Free operation without cover AI', () => {
+  test('creates a signed session without OpenAI credentials or a model', async () => {
+    const { env } = environment({
+      COVER_AI_ENABLED: undefined,
+      OPENAI_API_KEY: undefined,
+      OPENAI_MODEL: undefined,
+    });
+    const upstream = mockVision();
+    const token = await login(env);
+    const response = await worker.fetch(request('/search-movie', { title: 'Alien' }, token), env);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      candidates: [],
+      selected: null,
+      source: 'tmdb',
+      configured: false,
+    });
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  test('keeps barcode lookup and configured TMDB search available without OpenAI', async () => {
+    const { env } = environment({
+      COVER_AI_ENABLED: 'false',
+      OPENAI_API_KEY: undefined,
+      OPENAI_MODEL: undefined,
+      TMDB_READ_TOKEN: 'test-only-tmdb',
+    });
+    const token = await login(env);
+    const urls = [];
+    vi.stubGlobal('fetch', async (url) => {
+      urls.push(url);
+      if (new URL(url).hostname === 'api.upcitemdb.com')
+        return json({ code: 'OK', total: 1, items: [{ title: 'Alien DVD', images: [] }] });
+      return json({ page: 1, results: [], total_pages: 0, total_results: 0 });
+    });
+    const barcode = await worker.fetch(
+      request('/lookup-barcode', { barcode: '5708758695664' }, token),
+      env,
+    );
+    expect(barcode.status).toBe(200);
+    expect(await barcode.json()).toMatchObject({ found: true, title: 'Alien', format: 'DVD' });
+    const metadata = await worker.fetch(request('/search-movie', { title: 'Alien' }, token), env);
+    expect(metadata.status).toBe(200);
+    expect(await metadata.json()).toEqual({
+      candidates: [],
+      selected: null,
+      source: 'tmdb',
+      configured: true,
+    });
+    expect(urls.map((url) => new URL(url).hostname)).toEqual([
+      'api.upcitemdb.com',
+      'api.themoviedb.org',
+    ]);
+  });
+
+  test.each([undefined, 'false', 'TRUE', ' true ', true, '1'])(
+    'blocks cover AI without outbound requests unless the opt-in is exactly true: %s',
+    async (enabled) => {
+      const { env } = environment({
+        COVER_AI_ENABLED: enabled,
+        ...(enabled === undefined ? { OPENAI_API_KEY: undefined, OPENAI_MODEL: undefined } : {}),
+      });
+      const token = await login(env);
+      const upstream = mockVision();
+      const response = await worker.fetch(request('/identify-cover', { image }, token), env);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'Tjenesten er ikke klar. Kontrollér Worker-opsætningen.',
+        code: 'AI_DISABLED',
+      });
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(['OPENAI_API_KEY', 'OPENAI_MODEL'])(
+    'requires %s only for an explicitly enabled cover request',
+    async (field) => {
+      const { env } = environment({ [field]: undefined });
+      const token = await login(env);
+      const upstream = mockVision();
+      const response = await worker.fetch(request('/identify-cover', { image }, token), env);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'Tjenesten er ikke klar. Kontrollér Worker-opsætningen.',
+      });
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
+
+  test('retains origin, method, session and body-size checks while cover AI is disabled', async () => {
+    const { env } = environment({ COVER_AI_ENABLED: 'false' });
+    const token = await login(env);
+    const upstream = mockVision();
+    const blockedOrigin = await worker.fetch(
+      request('/identify-cover', { image }, token, { Origin: 'https://attacker.test' }),
+      env,
+    );
+    expect(blockedOrigin.status).toBe(403);
+    expect(blockedOrigin.headers.has('Access-Control-Allow-Origin')).toBe(false);
+    expect(
+      (await worker.fetch(request('/identify-cover', undefined, token, {}, 'GET'), env)).status,
+    ).toBe(405);
+    expect((await worker.fetch(request('/identify-cover', { image }), env)).status).toBe(401);
+    expect(
+      (
+        await worker.fetch(
+          request('/identify-cover', { image }, token, { 'Content-Length': '2010001' }),
+          env,
+        )
+      ).status,
+    ).toBe(413);
+    expect(
+      (await worker.fetch(request('/identify-cover', { image: 'x'.repeat(2_010_000) }, token), env))
+        .status,
+    ).toBe(413);
+    expect(upstream).not.toHaveBeenCalled();
   });
 });
 describe('Vision proxy', () => {

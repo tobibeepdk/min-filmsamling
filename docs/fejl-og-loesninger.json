@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "tobibeepdk/min-filmsamling",
-  "updated": "2026-10-12",
+  "updated": "2026-10-18",
   "verifiedMain": "e95c678d9ad39c392996081484550fc0e9d00077",
   "costConstraint": "Ingen køb af API-kredit eller yderligere betalte OpenAI-forsøg uden nyt udtrykkeligt ønske.",
   "statusLabels": {
@@ -11,7 +11,8 @@
     "blokeret": "Fortsat blokeret",
     "testdaekket": "Forebyggelse og testdækning",
     "loest": "Løst",
-    "haandteret": "Håndteret"
+    "haandteret": "Håndteret",
+    "automatiskverificeret": "Implementeret og automatisk verificeret"
   },
   "entries": [
     {
@@ -44,7 +45,8 @@
       "sources": [
         "min-filmsamling-levering.md",
         "min-filmsamling-slutrapport-20261012.md"
-      ]
+      ],
+      "currentApplicability": "Historisk AI-adfærd og testbevis. Fra 18. oktober bruger standardflowet titelsøgning og egne lokale coverfotos; se F19."
     },
     {
       "id": "F03",
@@ -60,7 +62,8 @@
       "sources": [
         "min-filmsamling-scan-slutrapport-2026-10-11.md",
         "min-filmsamling-slutrapport-20261012.md"
-      ]
+      ],
+      "currentApplicability": "Historisk coverkamera-reserve og testbevis. Ny standard åbner titelsøgning med valgfrit år ved ukendt kode eller providerfejl; se F19."
     },
     {
       "id": "F04",
@@ -108,7 +111,8 @@
       "sources": [
         "min-filmsamling-cover-levering.md",
         "min-filmsamling-slutrapport-20261012.md"
-      ]
+      ],
+      "currentApplicability": "Historiske AI-genforsøg og midlertidige AI-fotos. Ny standard gemmer egne coverfotos lokalt uden AI-upload; se F19."
     },
     {
       "id": "F07",
@@ -140,7 +144,8 @@
       "sources": [
         "min-filmsamling-loginverifikation-20261012.md",
         "min-filmsamling-slutrapport-20261012.md"
-      ]
+      ],
+      "currentApplicability": "Den citerede loginbesked om AI er historisk. Nyt login kræver ingen OpenAI-nøgle eller model; se F19. Første afvisnings årsag forbliver uafklaret."
     },
     {
       "id": "F09",
@@ -189,7 +194,8 @@
       "sources": [
         "min-filmsamling-slutrapport-20261012.md",
         "PR #7"
-      ]
+      ],
+      "currentApplicability": "Provideradgangen er ikke repareret eller genafprøvet. F19 deaktiverer cover-AI som standard og bruger manuel titelsøgning. Ingen køb eller flere betalte forsøg."
     },
     {
       "id": "F12",
@@ -269,6 +275,66 @@
       "sources": [
         "min-filmsamling-cover-levering.md",
         "min-filmsamling-slutrapport-20261012.md"
+      ],
+      "incidents": [
+        {
+          "date": "2026-10-18",
+          "class": "testvaerktoj",
+          "status": "Persistent probe og samlet E2E med ny fixture bestået: 62/62 cases.",
+          "symptom": "Playwright WebKit 26.6 ephemeral context afviser tekst-Blob, canvas-JPEG-Blob og genopbygget JPEG-Blob i IndexedDB med UnknownError: Error preparing Blob/File data to be stored in object store. Plain object og Uint8Array virker. Ingen appkode indlæses i diagnosen.",
+          "cause": "Problemet er afgrænset til browser-/context-opsætningen i den isolerede diagnose. TMPDIR=/private/tmp ændrer ikke udfaldet; frisk launchPersistentContext løser alle fem probe-cases. Den præcise interne årsag i den installerede WebKit-build er ikke bevist.",
+          "solution": "Playwright-fixturen ændres til unik persistent profil pr. WebKit-test, fortsat iPhone-viewport/emulering og mocks. Context lukkes og profil ryddes efter testen. Ingen produktionslager- eller billedformatændring.",
+          "prevention": "Kør appuafhængig Blob→IndexedDB-roundtrip i ephemeral og frisk persistent context ved gentagelse. Bevar reelle Blob-roundtrips og profil-isolation. Skift ikke coverlager til byteformat for at omgå dette testværktøjsproblem.",
+          "evidence": {
+            "webkitVersion": "26.6",
+            "chromiumVersion": "153.0.8010.12",
+            "default": {
+              "webkitPassed": 2,
+              "webkitCases": 5,
+              "webkitBlobFailures": 3,
+              "webkitBlobCases": 3,
+              "chromiumPassed": 5,
+              "chromiumCases": 5
+            },
+            "tmpdir": {
+              "value": "/private/tmp",
+              "webkitPassed": 2,
+              "webkitCases": 5,
+              "webkitBlobFailures": 3,
+              "webkitBlobCases": 3,
+              "chromiumPassed": 5,
+              "chromiumCases": 5
+            },
+            "persistent": {
+              "webkitPassed": 5,
+              "webkitCases": 5,
+              "chromiumPassed": 5,
+              "chromiumCases": 5,
+              "webkitStoredBlobByteCounts": [
+                23,
+                1867,
+                1867
+              ],
+              "chromiumStoredBlobByteCounts": [
+                23,
+                1128,
+                1128
+              ]
+            },
+            "appCodeLoaded": false,
+            "fullAppE2E": "Bestået efter proberne: 62/62, exit 0, 1,2 minutter; 31 WebKit med unik persistent profil og 31 Chromium. Reel JPEG→IndexedDB→reload og offline service worker. Kamera og providers er mocked."
+          },
+          "safety": "Ingen providerkald, secrets eller produktionsdata i diagnosen. Fysisk Safaris privattilstand, fysisk iPhone-kamera og liveprovideradgang er ikke verificeret.",
+          "upstreamSupport": {
+            "url": "https://raw.githubusercontent.com/WebKit/WebKit/main/Source/WebCore/Modules/indexeddb/IDBTransaction.cpp",
+            "observed": "putOrAddOnServer bruger isEphemeral ved Blob-forberedelse og indeholder tilsvarende fejlgren. Offentlig main-kilde er støtte, ikke alene årsagsbevis for den installerede build."
+          },
+          "sources": [
+            "/private/tmp/min-filmsamling-webkit-blob-probe-20261018-fresh-default.json",
+            "/private/tmp/min-filmsamling-webkit-blob-probe-20261018-fresh-tmpdir.json",
+            "/private/tmp/min-filmsamling-webkit-blob-probe-20261018-fresh-persistent.json"
+          ]
+        }
       ]
     },
     {
@@ -302,6 +368,46 @@
         "min-filmsamling-slutrapport-20261012.md",
         "min-filmsamling-kontroloutput-20261012.log"
       ]
+    },
+    {
+      "id": "F19",
+      "title": "Appen skal bruges uden betalt cover-AI",
+      "category": "forebyggelse",
+      "status": "automatiskverificeret",
+      "symptom": "Brugeren ønsker ingen flere AI-udgifter. Den tidligere ukendte-stregkode-reserve krævede AI, mens liveforsøg gav HTTP 429 uden genkendelsesresultat.",
+      "cause": "Coveridentifikation var koblet til en betalt provider. Den præcise tidligere 429-årsag er ikke endeligt fastslået; deaktivering reparerer ikke providerkontoen.",
+      "solution": "COVER_AI_ENABLED er som standard strengen false. /identify-cover skal give AI_DISABLED før providerkontakt; kun den præcise streng true må aktivere den bevarede adapter. Login kræver kun APP_ACCESS_KEY, SESSION_SIGNING_KEY og limiter-binding. Ukendt kode/providerfejl åbner titel og valgfrit år til TMDB; kendte/lokale koder fortsætter automatisk. Egne coverfotos gemmes komprimeret lokalt uden AI-upload. worker:setup kræver som standard ingen OpenAI-nøgle; --with-cover-ai tilføjer kun en valgfri secret-prompt.",
+      "prevention": "Verificér intet outbound-kald med OpenAI-secrets til stede ved deaktiveret, manglende, boolsk eller fejlstavet flag. Test login uden OpenAI, ukendt kode, providerfejl, TMDB-kandidater, annullering, forældede svar, lokal genbrug og egne coverfotos. Bevar data, CORS, grænser og migrationshistorik.",
+      "evidence": "Arbejdsgren codex/no-paid-ai, base-commit 0f2f55926ca5823c41dec747d6a8b23b83efe668, 18. oktober 2026. Node 24.19.0/pnpm 11.19.0. 240 enhedstests i 12 filer på 5,40 s består; endelig fuld lint exit 0; build 992 ms, id c4b1eb813c6930e4. E2E 62/62, exit 0, 1,2 minutter: 31 persistent WebKit og 31 Chromium med reel JPEG→IndexedDB→reload og offline service worker. Endelig security: 78 filer/84 git-commits/0 secret-fund. Browser-build: ingen servernøgler eller direkte OpenAI-kald. Ingen deployment eller gennemspillet produktionsflow er dokumenteret her; produktionsversion og Pages-bevis registreres særskilt efter udgivelse.",
+      "safety": "Ingen AI-kald, API-kreditkøb, nye OpenAI-secrets eller rotation. Gamle OpenAI-secrets kan ligge ubrugt. Spærringen gælder produktion efter ny Worker-deploy. Ingen løfte om gratis covergenkendelse eller nulpris for eksisterende Cloudflare/providerplaner. Alle eksisterende filmdata bevares.",
+      "verification": {
+        "sourceCommit": null,
+        "sourceTree": null,
+        "nodeVersion": "24.19.0",
+        "pnpmVersion": "11.19.0",
+        "checks": {
+          "pnpm test": "Bestået: 240 enhedstests i 12 filer, 5,40 sekunder.",
+          "pnpm lint": "Bestået: endelig fuld lint, exit 0.",
+          "pnpm build": "Bestået: 992 ms, build-id c4b1eb813c6930e4.",
+          "pnpm security": "Bestået: 78 filer og 84 git-commits kontrolleret; 0 secret-fund. Browser-build: ingen servernøgler eller direkte OpenAI-kald.",
+          "pnpm test:e2e": "Bestået: 62/62, exit 0, 1,2 minutter; 31 WebKit med unik persistent profil og 31 Chromium."
+        },
+        "testScope": "Automatiske enhedstests og app-E2E med mocked kamera/providers. E2E omfatter reel JPEG→IndexedDB→reload og offline service worker. F16 dokumenterer separat browser-/Blob-prober uden appkode. Fysisk iPhone, fysisk Safaris privattilstand og liveprovideradgang er ikke bevist.",
+        "workerDeployment": null,
+        "pagesDeployment": null,
+        "sourceBaseCommit": "0f2f55926ca5823c41dec747d6a8b23b83efe668",
+        "testedBranch": "codex/no-paid-ai",
+        "deploymentScope": "workerDeployment og pagesDeployment forbliver null her. Produktionsversion og Pages-bevis registreres særskilt i leveringsrapporten efter udgivelse; automatiske tests dokumenterer ikke deployment."
+      },
+      "sources": [
+        "Brugerens ønske: Gør appen klar uden betalt AI",
+        "worker/wrangler.toml",
+        "worker/src/index.js",
+        "src/app.js",
+        "scripts/setup-worker-secrets.sh",
+        "docs/OPSÆTNING-DANSK.md"
+      ]
     }
-  ]
+  ],
+  "verifiedMainScope": "Historisk kontrolpunkt fra 12. oktober 2026 før den nye standard uden betalt cover-AI; se F19 for den nye arbejdsgren."
 }
