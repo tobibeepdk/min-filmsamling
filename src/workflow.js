@@ -38,5 +38,5 @@ export async function processBarcode({ db, api, draft, signal }, code) {
     await db.put('drafts', nextDraft);
     return { draft: nextDraft, next: 'lookup', source: result.source };
   }
-  return { draft: nextDraft, next: 'cover' };
+  return { draft: nextDraft, next: 'search' };
 }

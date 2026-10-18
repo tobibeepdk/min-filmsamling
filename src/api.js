@@ -29,7 +29,7 @@ export function createApi(db, getUrl, fetcher = fetch) {
           : Date.parse(session?.expiresAt || '');
       if (!session?.token || !(expiresAt > Date.now()) || session.origin !== origin) {
         await db.delete('session', 'current');
-        throw new Error('Log ind i Indstillinger for at bruge filmopslag og AI.');
+        throw new Error('Log ind i Indstillinger for at bruge filmopslag.');
       }
       headers.Authorization = 'Bearer ' + session.token;
     }
@@ -78,7 +78,7 @@ export function createApi(db, getUrl, fetcher = fetch) {
           );
         if (response.status === 400 || response.status === 415)
           throw new Error(
-            'Billedet eller oplysningerne kunne ikke læses. Prøv et nyt foto. Kladden er gemt.',
+            'Oplysningerne kunne ikke læses. Kontrollér titel, årstal og stregkode. Kladden er gemt.',
           );
         if (response.status === 503)
           throw new Error(

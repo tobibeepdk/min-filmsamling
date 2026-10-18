@@ -5,15 +5,14 @@ import { exportBackup, importBackup, cleanMovie } from './backup.js';
 import { createApi, workerUrl } from './api.js';
 import { withWorkerDefault } from './config.js';
 import { processBarcode } from './workflow.js';
-import { decideRecognition } from './cover-ai.js';
 import { mergeMovieMetadata } from '../shared/movie.js';
 import { normalizeBarcode } from '../shared/barcode.js';
-import { blobToDataURL } from './camera.js';
 import { el, button, status, fatal, coverUrl } from './ui.js';
 import { renderLibrary } from './library-ui.js';
 import { renderEditor, readEditor } from './editor-ui.js';
 import { renderSettings } from './settings-ui.js';
 import { openScanner, openCoverCamera, showCandidates, closeModal } from './dialogs.js';
+import { openMovieSearch } from './movie-search.js';
 import { registerPwa } from './pwa.js';
 
 const app = document.querySelector('#app');
@@ -118,7 +117,12 @@ async function render(task) {
     );
     content = renderLibrary(
       displayed,
-      { scan: safe(scan), cover: safe(() => cover()), edit: safe(edit), newMovie: safe(add) },
+      {
+        scan: safe(scan),
+        search: safe(() => movieSearch()),
+        edit: safe(edit),
+        newMovie: safe(add),
+      },
       query,
       safe(async (value) => {
         query = value;
@@ -145,7 +149,7 @@ async function render(task) {
         save: safe(save),
         change: safe(persistDraft),
         scan: safe(scan),
-        cover: safe(() => cover()),
+        search: safe(() => movieSearch()),
         lookup: safe(lookup),
         cancel: safe(() => show('library')),
         ownCover: safe(ownCover),
@@ -228,23 +232,18 @@ async function barcode(code) {
     if (task.signal.aborted) return;
     await render(task);
     if (task.signal.aborted) return;
-    if (result.next === 'cover')
-      await cover('Stregkoden er ukendt. Tag et billede af forsiden, så finder appen filmen.');
+    if (result.next === 'search')
+      await movieSearch('Stregkoden er ukendt. Søg efter filmens titel, og vælg den rigtige film.');
     else if (result.next === 'lookup') await safe(lookup)();
     else status('Filmen blev fundet i den lokale stregkodekobling.');
   } catch (error) {
     if (!task.signal.aborted) {
       status(error.message);
-      await openCoverCamera({
-        message: error.message + ' Du kan også finde filmen fra forsiden.',
-        onBlob: analyze,
-        onCancel: cancel,
-        onStart: begin,
-      });
+      await movieSearch(error.message + ' Søg efter filmens titel i stedet.');
     }
   }
 }
-async function cover(message) {
+async function movieSearch(message) {
   const task = begin();
   if (view !== 'form') {
     if (!(await prepareAdd(task))) return;
@@ -252,50 +251,34 @@ async function cover(message) {
   if (task.signal.aborted) return;
   await render(task);
   if (task.signal.aborted) return;
-  await openCoverCamera({ message, onBlob: analyze, onCancel: cancel, onStart: begin });
-}
-async function analyze(blob, retry) {
-  const task = begin();
-  status('Uploader cover og analyserer hele forsiden…');
-  const result = await api.post(
-    '/identify-cover',
-    { image: await blobToDataURL(blob) },
-    { signal: task.signal },
-  );
-  if (task.signal.aborted) return;
-  const decision = decideRecognition(result);
-  const extras = [
-    button('Tag nyt billede', safe(retry.retry)),
-    button('Beskær titelområdet og prøv igen', safe(retry.crop)),
-    button('Annuller – behold kladden', cancel),
-  ];
-  if (decision.selected) await identified(decision.selected, task);
-  else {
-    status('Vælg en kandidat, eller tag et skarpere billede.');
-    showCandidates(
-      decision.candidates,
-      safe((candidate) => identified({ ...candidate, source: 'AI-covergenkendelse' }, task)),
-      extras,
-    );
-  }
-}
-async function identified(movie, task) {
-  if (task.signal.aborted) return;
-  draft = mergeMovieMetadata(readEditor(draft), movie);
-  closeModal();
-  await persistDraft(false);
-  if (task.signal.aborted) return;
-  await render(task);
-  if (task.signal.aborted) return;
-  status('Titlen er fundet. Henter filmoplysninger…');
-  await safe(lookup)();
+  openMovieSearch({
+    title: draft.title,
+    year: draft.year,
+    message,
+    onCancel: cancel,
+    onSearch: safe(async ({ title, year }) => {
+      if (task.signal.aborted) return;
+      const latest = readEditor(draft);
+      draft = {
+        ...latest,
+        title,
+        year,
+        originalTitle: title === latest.title?.trim() ? latest.originalTitle : '',
+      };
+      await persistDraft(false);
+      if (task.signal.aborted) return;
+      closeModal();
+      await render(task);
+      if (!task.signal.aborted) await safe(lookup)();
+    }),
+  });
 }
 async function lookup() {
   const task = begin();
   await persistDraft();
   if (task.signal.aborted) return;
   if (!draft.title?.trim())
-    throw new Error('Scan stregkoden eller fotografér coveret for at finde titlen.');
+    throw new Error('Scan stregkoden eller brug Søg efter film for at finde titlen.');
   status('Henter filmoplysninger og onlineomslag…');
   const result = await api.post(
     '/search-movie',
@@ -349,6 +332,7 @@ async function ownCover() {
   if (opening.signal.aborted) return;
   await openCoverCamera({
     own: true,
+    message: 'Tag et billede af coveret. Fotoet gemmes som dit eget omslag og sendes ikke til AI.',
     onStart: begin,
     onCancel: cancel,
     onBlob: async (blob) => {
@@ -383,7 +367,8 @@ async function save() {
     const task = begin();
     await persistDraft();
     if (task.signal.aborted) return;
-    if (!draft.title?.trim()) throw new Error('Find titlen ved at scanne eller tage et coverfoto.');
+    if (!draft.title?.trim())
+      throw new Error('Scan stregkoden, søg efter filmen, eller skriv titlen.');
     const id = draft.editingMovieId || crypto.randomUUID(),
       data = { ...draft, id, title: draft.title.trim(), updatedAt: new Date().toISOString() };
     delete data.displayCover;
@@ -449,7 +434,7 @@ async function login(url, key) {
     // eslint-disable-next-line no-useless-assignment
     key = '';
   }
-  status('Logget ind. Filmopslag og AI er klar.');
+  status('Logget ind. Filmopslag er klar.');
 }
 async function health(url) {
   const origin = workerUrl(url.trim());

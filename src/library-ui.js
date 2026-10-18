@@ -70,12 +70,16 @@ export function renderLibrary(
       { class: 'hero' },
       el('p', { class: 'eyebrow' }, 'DIN EGEN BIOGRAF'),
       el('h2', {}, 'Dine film. Din samling.'),
-      el('p', {}, 'Scan stregkoden eller tag et coverfoto. Så finder appen filmen for dig.'),
+      el(
+        'p',
+        {},
+        'Scan stregkoden eller søg på titlen. Hent filmoplysninger, og gem dit eget coverfoto.',
+      ),
       el(
         'div',
         { class: 'actions capture-actions' },
         button([icon('barcode'), 'Scan stregkode'], actions.scan, { class: 'primary' }),
-        button([icon('camera'), 'Find film fra cover'], actions.cover),
+        button([icon('search'), 'Søg efter film'], actions.search),
       ),
     ),
     el(
