@@ -3,6 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 [vars]
 ALLOWED_ORIGIN = "https://tobibeepdk.github.io"
+COVER_AI_ENABLED = "false"
 OPENAI_MODEL = "gpt-6.1-sol"
 SESSION_TTL_SECONDS = "900"
 DAILY_LIMIT = "100"
