@@ -13,15 +13,18 @@ En dansk PWA til en lokal filmsamling på iPhone. Samlingen, kladder og egne cov
 ## Funktioner
 
 - Scan EAN-13, EAN-8 og UPC-A med kameraet eller fra et foto; indtastning er også mulig.
-- Genkend en filmtitel fra et coverfoto med OpenAI gennem en Cloudflare Worker.
-- Behold coverfotoet ved et fejlet opslag, og prøv analysen igen eller beskær billedet. Fejl vises med sikre fejlkoder uden udbyderens rå fejltekst.
+- Søg efter en film med titel og eventuelt årstal, og vælg blandt TMDB-kandidater.
+- Ukendte stregkoder og mislykkede opslag åbner titelsøgningen. Kendte koder og lokale koblinger kan fortsat finde filmen automatisk.
+- Tag dit eget coverfoto, som komprimeres og gemmes lokalt uden AI-upload. Fejl vises med sikre fejlkoder uden udbyderens rå fejltekst.
 - Hent filmoplysninger fra TMDB og stregkodeoplysninger fra en konfigurerbar udbyder.
 - Bevar egne covers, noter, placering, favoritter og set-status, når metadata tilføjes.
 - Gem kladder automatisk og eksportér/importér JSON-backups med coverbilleder.
 - Installér fra Safari via **Del → Føj til hjemmeskærm**.
 - Mørkt biografdesign med gyldne knapper, formatmærker på filmkort og overblik over film, set og favoritter. Bundmenuen har ikoner og store touchmål til iPhone.
 
-Workerens secrets bliver på serveren. Appen bruger en kortlivet session efter login med en særskilt adgangsnøgle. OpenAI- og TMDB-nøgler skal indtastes i Wranglers secret-prompts, som beskrevet i vejledningen.
+Standardflowet bruger ingen betalt cover-AI. Worker har `COVER_AI_ENABLED = "false"` og afviser også ældre appversioners cover-AI-kald med `AI_DISABLED` før providerkontakt, når denne Worker-version er udgivet. En ukendt stregkode kræver titelindtastning; appen lover ikke gratis automatisk covergenkendelse. Eksisterende Cloudflare- eller providerplaner kan stadig have deres egne udgifter og kvoter.
+
+Workerens secrets bliver på serveren. Login kræver `APP_ACCESS_KEY` og `SESSION_SIGNING_KEY` samt den eksisterende limiter-binding. OpenAI-nøgle og model er ikke nødvendige for standardflowet; eksisterende OpenAI-secrets kan blive liggende ubrugt. TMDB-token er valgfrit. Secretværdier indtastes kun i Wranglers interaktive prompts, som beskrevet i vejledningen.
 
 ## Lokal udvikling
 
@@ -49,11 +52,11 @@ Hvis port 4173 bruges af et andet lokalt projekt, kan browser-testene køres med
 
 ## Data og drift
 
-Frontend: Vite, ES-moduler og lokal service worker. Backend: Cloudflare Worker, Responses API og en Durable Object til vedvarende fælles forbrugsgrænser. De seks IndexedDB-stores er `movies`, `drafts`, `barcodeMap`, `settings`, `coverBlobs` og `session`.
+Frontend: Vite, ES-moduler og lokal service worker. Backend: Cloudflare Worker til login, stregkode- og TMDB-opslag samt en Durable Object til vedvarende fælles forbrugsgrænser. Den tidligere cover-AI-adapter er deaktiveret som standard. De seks IndexedDB-stores er `movies`, `drafts`, `barcodeMap`, `settings`, `coverBlobs` og `session`.
 
 Ældre data fra samme origin migreres og verificeres. De gamle film og kladder bevares; gamle settings-secrets fjernes efter verificering. Data fra eksempelvis Netlify skal flyttes med eksport og import. Backups indeholder film og coverbilleder, mens indstillinger, login-sessioner og kladder udelades.
 
-Mock-tests dokumenterer kodeadfærd. Reelt kamera på en fysisk iPhone, AI-genkendelsens præcision og adgang til liveudbyderne kontrolleres efter brugerens deployment.
+Mock-tests dokumenterer kodeadfærd. Reelt kamera på en fysisk iPhone og adgang til liveudbyderne kræver særskilt kontrol efter deployment. Den nye standard kræver ingen AI-forsøg, API-kredit eller nye OpenAI-secrets.
 
 Stregkodeudbyderens adapter testes også i den samme `workerd`-runtime, som Wrangler bruger, med en mocked ekstern database. Testen kontrollerer både et filmfund og afvisning af omdirigeringer uden at videresende providercredentials. En grøn `/health` alene bekræfter ikke, at provideropslag virker.
 
