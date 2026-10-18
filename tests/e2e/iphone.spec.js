@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
@@ -16,15 +16,6 @@ const wicked = {
   source: 'tmdb',
   cover: '',
   score: 1,
-};
-const recognition = {
-  recognized: true,
-  title: 'The Wicked',
-  originalTitle: 'The Wicked',
-  year: 2013,
-  confidence: 0.94,
-  visibleText: ['THE WICKED'],
-  candidates: [{ title: 'The Wicked', year: 2013, confidence: 0.94 }],
 };
 async function setup(
   page,
@@ -108,20 +99,18 @@ async function setup(
         ? { token: 'mock-session', expiresAt: new Date(Date.now() + 3600000).toISOString() }
         : path === '/lookup-barcode'
           ? { found: false }
-          : path === '/identify-cover'
+          : path === '/search-movie'
             ? {
-                ...recognition,
-                confidence: low ? 0.6 : 0.94,
+                configured: true,
                 candidates: low
                   ? [
-                      { title: 'The Wicked', year: 2013, confidence: 0.6 },
-                      { title: 'Wicked', year: 2024, confidence: 0.4 },
+                      { ...wicked, score: 0.76 },
+                      { ...wicked, title: 'Wicked', year: 2024, score: 0.74 },
                     ]
-                  : recognition.candidates,
+                  : [wicked],
+                selected: low ? null : wicked,
               }
-            : path === '/search-movie'
-              ? { configured: true, candidates: [wicked], selected: wicked }
-              : { ok: true };
+            : { ok: true };
     await route.fulfill({ json: body, headers });
   });
   await page.goto(url);
@@ -243,7 +232,7 @@ test('brugerens Worker-adresse bevares ved genindlæsning', async ({ page }) => 
   await page.getByRole('button', { name: 'Test forbindelse', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Forbindelse til Worker er OK');
 });
-test('ukendt EAN går til AI og gemmer The Wicked uden titelindtastning', async ({
+test('ukendt EAN går til titelsøgning og gemmer en lokal kobling', async ({
   page,
   browserName,
 }) => {
@@ -255,10 +244,10 @@ test('ukendt EAN går til AI og gemmer The Wicked uden titelindtastning', async 
     await page.getByLabel('Stregkodenummer').fill('7393834487707');
     await page.getByRole('button', { name: 'Brug nummer' }).click();
   }
-  await expect(
-    page.getByText('Stregkoden er ukendt. Tag et billede af forsiden, så finder appen filmen.'),
-  ).toBeVisible();
-  await uploadCover(page);
+  const dialog = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await expect(dialog).toContainText(/stregkode.*ukendt|ukendt.*stregkode/i);
+  await dialog.getByLabel('Filmtitel', { exact: true }).fill('The Wicked');
+  await dialog.getByRole('button', { name: 'Søg', exact: true }).click();
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
   await expect(page.getByLabel('Instruktør')).toHaveValue('Peter Winther');
   await page.getByLabel('Noter').fill('Min personlige note');
@@ -279,7 +268,9 @@ test('ukendt EAN går til AI og gemmer The Wicked uden titelindtastning', async 
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
   expect(calls).toBe(0);
 });
-test('afvist kameratilladelse fører fra stregkode til coverfoto', async ({ page }) => {
+test('afvist kameratilladelse har nummerreserve, titelsøgning og eget coverfoto', async ({
+  page,
+}) => {
   await setup(page, { cameraAvailable: false });
   await login(page);
   await page.getByRole('button', { name: 'Film', exact: true }).click();
@@ -291,20 +282,30 @@ test('afvist kameratilladelse fører fra stregkode til coverfoto', async ({ page
   ).toBeVisible();
   await page.getByLabel('Stregkodenummer').fill('7393834487707');
   await page.getByRole('button', { name: 'Brug nummer' }).click();
-  await expect(
-    page.getByText('Stregkoden er ukendt. Tag et billede af forsiden, så finder appen filmen.'),
-  ).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Filmtitel', { exact: true }).fill('The Wicked');
+  await dialog.getByRole('button', { name: 'Søg', exact: true }).click();
+  await page.getByRole('button', { name: 'Tag eget coverfoto', exact: true }).click();
   await uploadCover(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
+  await expect(page.locator('.cover-editor img')).toBeVisible();
 });
-test('lav confidence giver store kandidatknapper', async ({ page }) => {
+test('usikker titelsøgning giver store kandidatknapper og bevarer noter', async ({ page }) => {
   await setup(page, { low: true });
   await login(page);
   await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
   await page.getByLabel('Noter').fill('Denne kladde bevares');
-  await page.getByRole('button', { name: 'Find film fra cover' }).click();
-  await uploadCover(page);
-  await page.getByRole('button', { name: 'The Wicked · 2013', exact: true }).click();
+  await page.getByRole('button', { name: 'Søg efter film', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await dialog.getByLabel('Filmtitel', { exact: true }).fill('Wicked');
+  await dialog.getByRole('button', { name: 'Søg', exact: true }).click();
+  const choice = page.getByRole('button', { name: 'The Wicked · 2013', exact: true });
+  await expect(choice).toBeVisible();
+  const box = await choice.boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  await choice.click();
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
   await expect(page.getByLabel('Noter')).toHaveValue('Denne kladde bevares');
 });
