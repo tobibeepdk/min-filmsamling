@@ -1,7 +1,7 @@
 import { HttpError } from './http.js';
 const encoder = new TextEncoder();
 export function configurationReady(env) {
-  const required = ['APP_ACCESS_KEY', 'SESSION_SIGNING_KEY', 'OPENAI_API_KEY', 'OPENAI_MODEL'];
+  const required = ['APP_ACCESS_KEY', 'SESSION_SIGNING_KEY'];
   return (
     required.every((name) => typeof env[name] === 'string' && env[name].trim()) &&
     env.SESSION_SIGNING_KEY.length >= 32 &&

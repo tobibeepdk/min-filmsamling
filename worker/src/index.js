@@ -65,8 +65,16 @@ export default {
       const body = await readJson(request, path === '/identify-cover' ? 2_010_000 : 4096);
       await consumeLimit(request, env, session);
       let data;
-      if (path === '/identify-cover') data = await identifyCover(body, env);
-      else if (path === '/lookup-barcode') data = await lookupBarcode(body, env);
+      if (path === '/identify-cover') {
+        if (env.COVER_AI_ENABLED !== 'true') throw new HttpError(503, undefined, 'AI_DISABLED');
+        if (
+          !['OPENAI_API_KEY', 'OPENAI_MODEL'].every(
+            (name) => typeof env[name] === 'string' && env[name].trim(),
+          )
+        )
+          throw new HttpError(503);
+        data = await identifyCover(body, env);
+      } else if (path === '/lookup-barcode') data = await lookupBarcode(body, env);
       else data = await searchMovie(body, env);
       return response(data, 200, origin);
     } catch (error) {
