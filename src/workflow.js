@@ -1,5 +1,6 @@
 import { normalizeBarcode } from '../shared/barcode.js';
 import { mergeMovieMetadata } from '../shared/movie.js';
+import { barcodeCatalogEntry } from './barcode-catalog.js';
 export async function processBarcode({ db, api, draft, signal }, code) {
   signal?.throwIfAborted();
   const barcode = normalizeBarcode(code);
@@ -20,6 +21,14 @@ export async function processBarcode({ db, api, draft, signal }, code) {
     signal?.throwIfAborted();
     await db.put('drafts', nextDraft);
     return { draft: nextDraft, next: 'form', source: 'local' };
+  }
+  const edition = barcodeCatalogEntry(barcode);
+  if (edition) {
+    nextDraft = mergeMovieMetadata(nextDraft, edition);
+    nextDraft.format = edition.format;
+    signal?.throwIfAborted();
+    await db.put('drafts', nextDraft);
+    return { draft: nextDraft, next: 'lookup', source: edition.source };
   }
   const result = await api.post('/lookup-barcode', { barcode });
   signal?.throwIfAborted();
