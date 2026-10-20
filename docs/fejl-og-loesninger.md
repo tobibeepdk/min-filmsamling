@@ -1,6 +1,6 @@
 # Fejl, udfordringer og afprøvede løsninger
 
-Denne genbrugelige oversigt samler erfaringerne frem til 18. oktober 2026. Slå symptomet op før nye forsøg; versioner, kontogrænser og runtimes skal revalideres, når miljøet ændrer sig. Den tilhørende [JSON-fil](fejl-og-loesninger.json) har samme poster til maskinopslag.
+Denne genbrugelige oversigt samler erfaringerne frem til 20. oktober 2026. Slå symptomet op før nye forsøg; versioner, kontogrænser og runtimes skal revalideres, når miljøet ændrer sig. Den tilhørende [JSON-fil](fejl-og-loesninger.json) har samme poster til maskinopslag.
 
 Den nye standard uden betalt cover-AI beskrives i [F19](#f19). F02, F03, F06 og F08 bevarer tidligere adfærd og testbevis; de er ikke en vejledning til at genaktivere cover-AI. F11 dokumenterer en fortsat uafklaret providergrænse, som standardflowet nu går uden om.
 
@@ -27,6 +27,8 @@ Løsninger markeret **mocktestet** er implementeret og testet med mocks; de bevi
 | [F17](#f17) | Browserstyring viser gammel tilstand eller forkert loginfane | Håndteret |
 | [F18](#f18) | Grøn health eller mocktest bliver forvekslet med livebevis | Forebyggelse og testdækning |
 | [F19](#f19) | Appen skal bruges uden betalt cover-AI | Implementeret og automatisk verificeret |
+| [F20](#f20) | Stregkoden glemmes efter providerfejl | Rettet og mocktestet |
+| [F21](#f21) | DVD 5706710213130 mangler i den eksterne database | Afklaret med liveopslag; lokal kobling testet |
 
 Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9d00077`, tree `f7d64bcea1fa3b38a10b26a91b1f813674b1fcd3`. [Main-CI og Pages](https://github.com/tobibeepdk/min-filmsamling/actions/runs/38296925440) bestod med 227 enhedstests, 52 E2E-tests, lint, build og 0 secret-fund. Worker-version `11cb2ef0-bee3-42b8-8eaf-49fd2e52dd3f` var aktiv på 100 %. Dette er et historisk kontrolpunkt, ikke automatisk bevis for en senere version.
 
@@ -433,6 +435,46 @@ Verificeret kilde ved sidste udgivelse: main `e95c678d9ad39c392996081484550fc0e9
 **Sikkerhed:** Ingen AI-kald, API-kreditkøb, nye OpenAI-secrets eller secretrotation som led i ændringen. Gamle OpenAI-secrets kan blive liggende ubrugt. Serverens spærring gælder først, når den nye Worker er udgivet; en frontendopdatering alene ændrer ikke den gamle Worker. Der loves ingen gratis automatisk covergenkendelse og ingen nulpris for eksisterende Cloudflare- eller providerplaner. Film, kladder, egne covers, noter, placering, favoritter og set-status skal bevares.
 
 **Kilder:** Brugerens ønske “Gør appen klar uden betalt AI”; `worker/wrangler.toml`; `worker/src/index.js`; `src/app.js`; `scripts/setup-worker-secrets.sh`; `docs/OPSÆTNING-DANSK.md`. Endelige filnavne og resultater kontrolleres ved slutverifikation.
+
+<a id="f20"></a>
+
+## F20. Stregkoden glemmes efter providerfejl
+
+**Status:** Rettet og mocktestet, 20. oktober 2026. Kilde: `fix/iphone-barcode-recognition`, udgangspunkt main `13a636efc634b8ddc237ce3c52c60532f74117df`. Udgivelse skal verificeres særskilt.
+
+**Symptom:** Kameraet har læst nummeret, men et mislykket databaseopslag efterfulgt af titelsøgning kan efterlade kladden uden stregkoden. Efter filmvalg og gemning mangler den lokale kobling, så næste scanning igen kræver opslag eller titelsøgning.
+
+**Årsag:** `processBarcode` gemte nummeret i IndexedDB, men appens hukommelseskladde og editor beholdt den gamle kode. Fejlreserven åbnede `movieSearch`, hvis automatiske kladdegemning overskrev nummeret med editorens gamle værdi. Dette er en reproduceret frontendfejl. Det konkrete databasefund var uafklaret før brugerens foto; se F21 for den efterfølgende livekontrol. Denne autosave-rettelse tilføjer ikke produkter til den eksterne database.
+
+**Afprøvet løsning:** Validér og normalisér nummeret i `barcode`, flet det med de seneste editorfelter, og opdatér editorens stregkodefelt synkront før den første asynkrone gemning. Gem derefter kladden før provideropslaget. Bevar annulleringskontrollerne på begge sider af asynkrone trin. Dermed bevares koden ved fejl, annullering og genindlæsning, og eksisterende gemning kan danne `barcodeMap` efter et manuelt filmvalg.
+
+**Forebyggelse:** Test providerfejl særskilt fra et rent database-miss. Kontrollér kladden efter annullering/genindlæsning og den faktiske gemte `barcodeMap` efter filmvalg. Scan derefter igen, og kræv lokal udfyldning uden nye provider- eller metadataopslag. Noter og placering ændret under et forsinket opslag skal også bevares. En særskilt regression udløser input under den første IndexedDB-skrivning; det gamle felt må heller ikke kunne genskabe den tomme kode i dette vindue. Skift ikke kamerakode, når nummeret allerede bliver læst.
+
+**Bevis og testscope:** Fire målrettede browsercases fejlede med tom stregkode før rettelsen. Review reproducerede desuden et autosave-vindue under den første skrivning: yderligere to cases fejlede før synkron opdatering af editorfeltet. Alle seks målrettede cases består i WebKit og Chromium med iPhone-viewport. Den samlede slutkørsel består med 240 enhedstests, 66 browsercases, lint, build og sikkerhedskontrol (78 filer + 94 tidligere commits, 0 fund); build-id `cd249198fd19fead`. Testene bruger appens rigtige editor og IndexedDB; eksterne API-svar og kameragrænsen er mocked. `7393834487707` bruges som testkode med et syntetisk The Wicked-resultat, ikke som en påstand om den virkelige produkttitel. Samlede checks og releasegrænser registreres i `VERIFIKATION.md` og leveringsrapporten. Ingen fysisk iPhone eller autentificeret liveprovider er verificeret her.
+
+**Sikkerhed:** Ingen ændring af Worker, secrets, loginlevetid, CORS, forbrugsgrænser, kameralæser, dataskema eller gamle film. Ingen AI-kald eller køb. Betalt AI forbliver deaktiveret. Der opfindes ingen titel for et ukendt nummer.
+
+**Kilder:** `src/app.js`; `tests/e2e/free-mode.spec.js`; brugerens afklaring “Nummeret læses, men filmen findes ikke”.
+
+<a id="f21"></a>
+
+## F21. DVD 5706710213130 mangler i den eksterne database
+
+**Status:** Manglende databasedækning afklaret med et anonymt liveopslag. Den lokale løsning er implementeret og mocktestet. Deployment dokumenteres særskilt i leveringsrapporten.
+
+**Symptom:** iPhone læser nummeret, men filmen findes ikke. Brugerens foto viser EAN `5706710213130`, titlen **Freddy vs. Jason**, instruktøren Ronny Yu og DVD-format.
+
+**Årsag og afgrænsning:** Nummeret består EAN-13-kontrolcifret og har ingen UPC-A-variant. Et enkelt nøglefrit opslag i UPCitemDBs offentlige trial-endpoint gav HTTP 200 med `code: "OK"`, `total: 0` og `items: []`. Det er et korrekt database-miss, ikke bevis for en defekt kameradekoder. Filmens produktionsår 2003 og instruktør er kontrolleret i [Australian Classifications primære register](https://www.classification.gov.au/titles/freddy-vs-jason). Registeret beviser filmens identitet/år, mens brugerens faktiske DVD-foto beviser netop EAN-koblingen.
+
+**Afprøvet løsning:** `src/barcode-catalog.js` indeholder en lille liste af præcist verificerede udgaver. Kun denne fulde EAN kobles til Freddy vs. Jason, originaltitel, år 2003 og DVD. `processBarcode` kontrollerer først brugerens lokale `barcodeMap`, derefter kataloget og til sidst den eksisterende provider. Katalogfundet gemmer kladden og går direkte til det normale TMDB-opslag; der kræves ingen titelindtastning. Uden login kan den verificerede grundregistrering stadig gemmes. Efter brugerens gemning dannes den normale lokale kobling.
+
+**Forebyggelse:** Kataloget må ikke gætte film fra lignende numre eller sprede et eksempel til andre udgaver. Bevar egne noter, placering, set/favorit og egne coverfotos samt brugerens eksisterende koblinger. Test både automatisk TMDB-berigelse og gemning uden login. Kontrolleret fotograferet titel og anonymt produktopslag må ikke forveksles med fungerende billed-AI eller en gennemspillet fysisk iPhone-scanning. Øvrige ukendte koder kræver fortsat titelsøgning; kataloget løser ikke al manglende databasedækning.
+
+**Bevis og testscope:** En ny enhedstest fejlede først (manglende titel/år/DVD og næste trin søgning), derefter består 30 flow-tests inklusive brugerens forrang. Fire browsertests fejlede mod det gamle build med tom titel. Kamera/API er mocked og nummeret indtastes i scannervinduet; formularer og IndexedDB er reelle. Slutkontrollen består med 242 enhedstests, 70 browsercases (35 i hver browser), lint, build og sikkerhedskontrol: 79 filer + 95 tidligere commits, 0 fund. Build-id `999bf1350df2c94d`. Den 529 bytes importfil til den eksisterende app er også valideret med faktisk `importBackup` mod isoleret fake-indexeddb: én ny film/kobling, idempotent gentagelse og bevarede eksisterende noter, placering og coverbytes. Den første kørsel mod den nye kode nåede korrekt titel/år, men testens præcise `Format`-label fandtes ikke; kun testvælgeren blev rettet til det eksisterende `select[name="format"]`. Dette var en testværktøjsfejl, ikke en ekstra produktionsrettelse.
+
+**Sikkerhed:** Ét offentligt, gratis UPC-opslag uden credentials; ingen OpenAI-kald, kreditkøb, nye secrets eller secretrotation. Billedet blev ikke sendt til en provider eller lagt i repositoryet. Ingen ændring af Worker, CORS, sessionlevetid, rate limits, dataskema eller gamle film. Betalt cover-AI forbliver deaktiveret.
+
+**Kilder:** Brugerens DVD-foto; `https://api.upcitemdb.com/prod/trial/lookup?upc=5706710213130`; Australian Classification; `src/barcode-catalog.js`; `src/workflow.js`; `tests/unit/flow.test.js`; `tests/e2e/free-mode.spec.js`. Anonymt liveoutput er gemt i `min-filmsamling-freddy-upc-probe-20261020.json` i opgavens artefaktmappe.
 
 ## Fremgangsmåde næste gang
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "project": "tobibeepdk/min-filmsamling",
-  "updated": "2026-10-18",
+  "updated": "2026-10-20",
   "verifiedMain": "e95c678d9ad39c392996081484550fc0e9d00077",
   "costConstraint": "Ingen køb af API-kredit eller yderligere betalte OpenAI-forsøg uden nyt udtrykkeligt ønske.",
   "statusLabels": {
@@ -406,6 +406,44 @@
         "src/app.js",
         "scripts/setup-worker-secrets.sh",
         "docs/OPSÆTNING-DANSK.md"
+      ]
+    },
+    {
+      "id": "F20",
+      "title": "Stregkoden glemmes efter providerfejl",
+      "category": "produktion",
+      "status": "mocktestet",
+      "symptom": "Læst nummer mistes efter providerfejl og titelsøgning; næste scanning mangler lokal kobling.",
+      "cause": "processBarcode gemte koden i IndexedDB, men appens draft/editor havde gammel kode. movieSearch/persistDraft overskrev den gemte kode. Brugerens senere foto og konkrete database-miss er særskilt afklaret i F21.",
+      "solution": "Normalisér koden, flet med seneste editorfelter, opdatér editorens kode synkront før første await, og gem før provideropslag; bevar task.signal-kontroller.",
+      "prevention": "Kontrollér kode efter fejl, cancel/reload, filmvalg/gemning og lokal rescan uden API. Bevar noter og placering ændret under opslag. Ændr ikke kamera for et nummer, der allerede læses.",
+      "evidence": "RED: fire cases med tabt kode og to ekstra autosave-cases. GREEN: seks målrettede cases; samlet 240 unit, 66 E2E (33 WebKit + 33 Chromium), lint/build/security; 78 filer + 94 tidligere commits, 0 fund. Build cd249198fd19fead. Rigtig editor/IndexedDB; mocked kamera/providers. Testkode7393834487707 og syntetisk The Wicked er ikke liveproduktbevis. Ikke deployet: GitHub-write403.",
+      "safety": "Ingen ændring af Worker, secrets, session, CORS, dataskema eller gamle film. Ingen AI-kald/køb; betalt AI forbliver deaktiveret. Ingen opdigtet titel.",
+      "sources": [
+        "src/app.js",
+        "tests/e2e/free-mode.spec.js",
+        "docs/VERIFIKATION.md"
+      ]
+    },
+    {
+      "id": "F21",
+      "title": "DVD 5706710213130 mangler i den eksterne database",
+      "category": "datadaekning",
+      "status": "mocktestet",
+      "symptom": "Koden læses, men filmen findes ikke. DVD-fotoet viser 5706710213130, Freddy vs. Jason, Ronny Yu og DVD-format.",
+      "cause": "Gyldig EAN-13. Ét anonymt gratis liveopslag i UPCitemDB trial gav HTTP 200, code OK, total 0 og items []. En kamerafejl er ikke påvist.",
+      "solution": "En præcis verificeret lokal udgavekobling til Freddy vs. Jason (2003), DVD, anvendes før provider og efter brugerens barcodeMap. Gem kladden, og fortsæt til normalt TMDB-opslag.",
+      "prevention": "Gæt ikke fra lignende koder. Dokumentér faktisk udgavefoto og primærkilde til filmår. Brugerens kobling har forrang; øvrige ukendte koder bruger eksisterende titelsøgning.",
+      "evidence": "Unit RED: 1 fejlede, 29 bestod; GREEN: 30 flow-tests. Fire browsercases fejlede med tom titel; derefter består fire målrettede cases. Samlet 242 unit, 70 E2E, lint, build og security; 79 filer + 95 tidligere commits, 0 fund. Build 999bf1350df2c94d. Reelle formularer/IndexedDB, mocked kamera/TMDB, manuel indtastning af nummer i scannervinduet. Importfil på 529 bytes valideret med faktisk importBackup/fake-indexeddb: én film/kobling, idempotent gentagelse, eksisterende data/coverbytes bevaret. Testene dokumenterer ikke import på brugerens enhed eller deployment.",
+      "safety": "Ingen betalt AI, køb, nye credentials eller foto til provider/repository. Worker, secrets, session, CORS, forbrugsgrænser, dataskema og brugerfilm ændres ikke.",
+      "sources": [
+        "Brugerens DVD-foto,20oktober2026",
+        "https://www.classification.gov.au/titles/freddy-vs-jason",
+        "https://api.upcitemdb.com/prod/trial/lookup?upc=5706710213130",
+        "src/barcode-catalog.js",
+        "src/workflow.js",
+        "tests/unit/flow.test.js",
+        "tests/e2e/free-mode.spec.js"
       ]
     }
   ],
