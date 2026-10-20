@@ -6,6 +6,94 @@ import { rankMovies, mergeMovieMetadata } from '../../shared/movie.js';
 import { decideRecognition } from '../../src/cover-ai.js';
 
 describe('filmflow og metadata', () => {
+  it('den verificerede Freddy vs. Jason-DVD findes uden stregkodeprovider og bevarer egne felter', async () => {
+    const db = await openDatabase('verified-dvd-' + crypto.randomUUID());
+    let remoteCalls = 0;
+    const result = await processBarcode(
+      {
+        db,
+        api: {
+          post: async () => {
+            remoteCalls += 1;
+            return { found: false };
+          },
+        },
+        draft: {
+          notes: 'Min note på DVDen',
+          location: 'Reol 3',
+          coverId: 'eget-cover',
+          coverSource: 'own',
+          favorite: true,
+          watched: true,
+        },
+      },
+      '5706710213130',
+    );
+    expect(result).toMatchObject({
+      next: 'lookup',
+      source: 'Verificeret DVD-udgave',
+      draft: {
+        barcode: '5706710213130',
+        title: 'Freddy vs. Jason',
+        originalTitle: 'Freddy vs. Jason',
+        year: 2003,
+        format: 'DVD',
+        notes: 'Min note på DVDen',
+        location: 'Reol 3',
+        coverId: 'eget-cover',
+        coverSource: 'own',
+        favorite: true,
+        watched: true,
+      },
+    });
+    expect(await db.get('drafts', 'current')).toEqual(result.draft);
+    expect(remoteCalls).toBe(0);
+    db.close();
+  });
+  it('brugerens lokale kobling har forrang over den verificerede DVD-udgave', async () => {
+    const db = await openDatabase('verified-dvd-user-override-' + crypto.randomUUID());
+    await db.put('movies', {
+      id: 'user-film',
+      title: 'Min egen registrering',
+      originalTitle: 'Min originaltitel',
+      year: 2004,
+      format: 'Andet',
+    });
+    await db.put('barcodeMap', {
+      id: '5706710213130',
+      movieId: 'user-film',
+      title: 'Min egen registrering',
+      year: 2004,
+    });
+    const result = await processBarcode(
+      {
+        db,
+        api: {
+          post: () => {
+            throw Error('API må ikke kaldes');
+          },
+        },
+        draft: { notes: 'Min note', location: 'Reol 2', coverId: 'eget-cover' },
+      },
+      '5706710213130',
+    );
+    expect(result).toMatchObject({
+      next: 'form',
+      source: 'local',
+      draft: {
+        barcode: '5706710213130',
+        title: 'Min egen registrering',
+        originalTitle: 'Min originaltitel',
+        year: 2004,
+        format: 'Andet',
+        notes: 'Min note',
+        location: 'Reol 2',
+        coverId: 'eget-cover',
+      },
+    });
+    expect(await db.get('drafts', 'current')).toEqual(result.draft);
+    db.close();
+  });
   it('ukendt 7393834487707 åbner titelsøgning og gemmer kladden uden AI', async () => {
     const db = await openDatabase('unknown-' + crypto.randomUUID());
     const result = await processBarcode(
