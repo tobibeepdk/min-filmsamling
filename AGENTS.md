@@ -32,6 +32,7 @@
 - Valider hele en backup før en atomisk merge. Backup allowlister filmfelter og tilknyttede covers; settings, sessioner og kladder udelades. Bevar eksisterende film-ID'er ved import.
 - Gem kladder automatisk. Annullering og overlappende kamera-/API-kald må ikke overskrive nyere brugerinput.
 - Bevar stregkodernes kontrolciffervalidering og normalisering. Ukendte koder og providerfejl giver titelsøgning med valgfrit årstal; opfind ikke en filmtitel eller lov gratis covergenkendelse. Kendte koder og lokale koblinger bruger fortsat automatisk opslag.
+- Kontroller først brugerens `barcodeMap`, derefter det præcise lokale udgavekatalog i `src/barcode-catalog.js`, derefter provider. Tilføj kun katalogposter med dokumenteret stregkode/titel fra den faktiske udgave; gem kilder i fejlloggen. Gæt ikke beslægtede koder, og tilsidesæt ikke brugerens egne koblinger.
 - Egne coverfotos komprimeres og gemmes lokalt uden AI-upload. Metadata må ikke overskrive dem.
 - Billedbehandling skal anvende EXIF-retning, fjerne metadata og overholde de aftalte størrelsegrænser.
 - Service worker cacher statiske appfiler, aldrig API-svar. Opdatering aktiveres af brugeren og bevarer IndexedDB-data.

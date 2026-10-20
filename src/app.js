@@ -208,6 +208,12 @@ async function barcode(code) {
   if (task.signal.aborted) return;
   status('Slår stregkoden op…');
   try {
+    code = normalizeBarcode(code);
+    draft = { ...readEditor(draft), barcode: code };
+    const barcodeInput = app.querySelector('input[name="barcode"]');
+    if (barcodeInput) barcodeInput.value = code;
+    await persistDraft(false);
+    if (task.signal.aborted) return;
     const result = await processBarcode(
       {
         db,

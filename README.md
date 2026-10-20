@@ -13,6 +13,7 @@ En dansk PWA til en lokal filmsamling på iPhone. Samlingen, kladder og egne cov
 ## Funktioner
 
 - Scan EAN-13, EAN-8 og UPC-A med kameraet eller fra et foto; indtastning er også mulig.
+- Verificerede DVD-udgaver kan genkendes fra en lille lokal liste før netopslag. Eksempel: `5706710213130` → **Freddy vs. Jason (2003)**. Brugerens egne gemte koblinger har forrang.
 - Søg efter en film med titel og eventuelt årstal, og vælg blandt TMDB-kandidater.
 - Ukendte stregkoder og mislykkede opslag åbner titelsøgningen. Kendte koder og lokale koblinger kan fortsat finde filmen automatisk.
 - Tag dit eget coverfoto, som komprimeres og gemmes lokalt uden AI-upload. Fejl vises med sikre fejlkoder uden udbyderens rå fejltekst.

@@ -105,9 +105,9 @@ async function records(page) {
       request.onerror = () => reject(request.error);
     });
     const result = await new Promise((resolve, reject) => {
-      const tx = db.transaction(['movies', 'drafts', 'coverBlobs'], 'readonly');
+      const tx = db.transaction(['movies', 'drafts', 'coverBlobs', 'barcodeMap'], 'readonly');
       const data = {};
-      for (const store of ['movies', 'drafts', 'coverBlobs']) {
+      for (const store of ['movies', 'drafts', 'coverBlobs', 'barcodeMap']) {
         const request = tx.objectStore(store).getAll();
         request.onsuccess = () => {
           data[store] = request.result;
@@ -130,6 +130,100 @@ async function records(page) {
     };
   });
 }
+
+// The photographed DVD is absent from UPCitemDB; its verified identity must need no title input.
+test('5706710213130 finder Freddy vs. Jason uden titelindtastning eller betalt AI', async ({
+  page,
+}) => {
+  const requests = await setup(page, {
+    candidates: [
+      {
+        title: 'Freddy vs. Jason',
+        originalTitle: 'Freddy vs. Jason',
+        year: 2003,
+        plot: 'Freddy og Jason mødes.',
+        genre: 'Gyser',
+        director: 'Ronny Yu',
+        actors: 'Robert Englund',
+        runtime: 97,
+        source: 'tmdb',
+        cover: '',
+        score: 1,
+      },
+    ],
+  });
+  await login(page);
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByLabel('Noter').fill('Min danske dobbeltlags-DVD');
+  await page.getByLabel('Placering').fill('Gyserreol');
+  const scan = async () => {
+    await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
+    await page.getByLabel('Stregkodenummer').fill('5706710213130');
+    await page.getByRole('button', { name: 'Brug nummer', exact: true }).click();
+  };
+  await scan();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Freddy vs. Jason');
+  await expect(page.getByLabel('År', { exact: true })).toHaveValue('2003');
+  await expect(page.getByLabel('Instruktør')).toHaveValue('Ronny Yu');
+  await expect(page.getByLabel('Stregkode', { exact: true })).toHaveValue('5706710213130');
+  await expect(page.locator('#film-form select[name="format"]')).toHaveValue('DVD');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(requests.filter(({ path }) => path === '/lookup-barcode')).toHaveLength(0);
+  expect(requests.filter(({ path }) => path === '/search-movie')).toEqual([
+    {
+      path: '/search-movie',
+      body: { title: 'Freddy vs. Jason', originalTitle: 'Freddy vs. Jason', year: 2003 },
+    },
+  ]);
+  expect(requests.some(({ path }) => path === '/identify-cover')).toBe(false);
+  await page.getByRole('button', { name: 'Gem film', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Freddy vs. Jason', exact: true })).toBeVisible();
+  const saved = await records(page);
+  expect(saved.movies[0]).toMatchObject({
+    title: 'Freddy vs. Jason',
+    year: '2003',
+    format: 'DVD',
+    barcode: '5706710213130',
+    notes: 'Min danske dobbeltlags-DVD',
+    location: 'Gyserreol',
+  });
+  expect(saved.barcodeMap).toEqual([
+    {
+      id: '5706710213130',
+      movieId: saved.movies[0].id,
+      title: 'Freddy vs. Jason',
+      year: '2003',
+    },
+  ]);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Freddy vs. Jason', exact: true })).toBeVisible();
+  const beforeRescan = requests.length;
+  await scan();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Freddy vs. Jason');
+  await expect(page.getByRole('status')).toContainText('lokale stregkodekobling');
+  expect(requests).toHaveLength(beforeRescan);
+});
+
+test('5706710213130 kan gemmes uden login med verificeret titel', async ({ page }) => {
+  const requests = await setup(page);
+  await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
+  await page.getByLabel('Stregkodenummer').fill('5706710213130');
+  await page.getByRole('button', { name: 'Brug nummer', exact: true }).click();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Freddy vs. Jason');
+  await expect(page.getByLabel('År', { exact: true })).toHaveValue('2003');
+  await expect(page.locator('#film-form select[name="format"]')).toHaveValue('DVD');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+  await page.getByRole('button', { name: 'Gem film', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Freddy vs. Jason', exact: true })).toBeVisible();
+  expect((await records(page)).movies[0]).toMatchObject({
+    title: 'Freddy vs. Jason',
+    year: '2003',
+    format: 'DVD',
+    barcode: '5706710213130',
+    source: 'Verificeret DVD-udgave',
+  });
+});
 
 // A wrong search route, dropped year, or missing metadata application must break this flow.
 test('titelsøgning fra forsiden henter metadata med valgfrit år og gemmer filmen', async ({
@@ -199,16 +293,29 @@ test('ukendt stregkode giver titelsøgning og lader brugeren vælge blandt usikr
 });
 
 // Provider failures must still offer the free fallback and keep the original draft on cancel.
-test('stregkodeproviderfejl tilbyder titelsøgning og annullering bevarer kladden', async ({
+test('stregkodeproviderfejl bevarer stregkoden ved annullering og genindlæsning', async ({
   page,
 }) => {
   const requests = await setup(page, { barcodeError: true });
+  const requested = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  await page.route(`${worker}/lookup-barcode`, async (route) => {
+    if (route.request().method() === 'POST') {
+      requested.resolve();
+      await release.promise;
+    }
+    await route.fallback();
+  });
   await login(page);
   await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
   await page.getByLabel('Titel', { exact: true }).fill('Min ufærdige film');
+  await page.getByLabel('Noter').fill('Før scanning');
+  await page.getByLabel('Placering').fill('Kasse 1');
+  await scanUnknownBarcode(page);
+  await requested.promise;
   await page.getByLabel('Noter').fill('Bevar ved providerfejl');
   await page.getByLabel('Placering').fill('Kasse 2');
-  await scanUnknownBarcode(page);
+  release.resolve();
   const dialog = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText(/titel/i);
@@ -216,12 +323,109 @@ test('stregkodeproviderfejl tilbyder titelsøgning og annullering bevarer kladde
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Min ufærdige film');
   await expect(page.getByLabel('Noter')).toHaveValue('Bevar ved providerfejl');
   await expect(page.getByLabel('Placering')).toHaveValue('Kasse 2');
+  await expect(page.getByLabel('Stregkode', { exact: true })).toHaveValue('7393834487707');
   await page.reload();
   await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
   await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Min ufærdige film');
   await expect(page.getByLabel('Noter')).toHaveValue('Bevar ved providerfejl');
+  await expect(page.getByLabel('Placering')).toHaveValue('Kasse 2');
+  await expect(page.getByLabel('Stregkode', { exact: true })).toHaveValue('7393834487707');
+  expect((await records(page)).drafts.find(({ id }) => id === 'new')).toMatchObject({
+    barcode: '7393834487707',
+    notes: 'Bevar ved providerfejl',
+    location: 'Kasse 2',
+  });
   expect(requests.some(({ path }) => path === '/identify-cover')).toBe(false);
   expect(requests.some(({ path }) => path === '/search-movie')).toBe(false);
+});
+
+// Keep native IndexedDB writes; schedule real editor input while the first barcode write awaits.
+test('stregkodeproviderfejl bevarer stregkoden når autosave starter under den første skrivning', async ({
+  page,
+}) => {
+  const requests = await setup(page, { barcodeError: true });
+  await login(page);
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByLabel('Noter').fill('Før den første skrivning');
+  await page.getByLabel('Placering').fill('Kasse 4');
+  await page.getByRole('button', { name: 'Scan stregkode', exact: true }).click();
+  await page.getByLabel('Stregkodenummer').fill('7393834487707');
+  await page.evaluate(() => {
+    const nativePut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, ...args) {
+      const request = nativePut.call(this, value, ...args);
+      if (this.name === 'drafts' && value.id === 'current' && value.barcode === '7393834487707') {
+        IDBObjectStore.prototype.put = nativePut;
+        queueMicrotask(() => {
+          const notes = document.querySelector('#film-form [name="notes"]');
+          notes.value = 'Seneste note under den første skrivning';
+          notes.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      }
+      return request;
+    };
+  });
+  await page.getByRole('button', { name: 'Brug nummer', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Annuller – behold kladden', exact: true }).click();
+  await expect(page.getByLabel('Noter')).toHaveValue('Seneste note under den første skrivning');
+  await expect(page.getByLabel('Stregkode', { exact: true })).toHaveValue('7393834487707');
+  await page.reload();
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await expect(page.getByLabel('Noter')).toHaveValue('Seneste note under den første skrivning');
+  await expect(page.getByLabel('Placering')).toHaveValue('Kasse 4');
+  await expect(page.getByLabel('Stregkode', { exact: true })).toHaveValue('7393834487707');
+  expect(requests.filter(({ path }) => path === '/lookup-barcode')).toHaveLength(1);
+  expect(requests.some(({ path }) => path === '/identify-cover')).toBe(false);
+});
+
+// A provider failure must still let the selected film teach the local barcode mapping.
+test('stregkodeproviderfejl efterfulgt af filmvalg gemmer koblingen til næste scanning', async ({
+  page,
+}) => {
+  const requests = await setup(page, {
+    barcodeError: true,
+    candidates: [
+      { ...wicked, title: 'Wicked', originalTitle: 'Wicked', year: 2024, score: 0.76 },
+      { ...wicked, score: 0.74 },
+    ],
+  });
+  await login(page);
+  await page.getByRole('button', { name: 'Tilføj', exact: true }).click();
+  await page.getByLabel('Noter').fill('Bevar efter filmvalg');
+  await page.getByLabel('Placering').fill('Kasse 3');
+  await scanUnknownBarcode(page);
+  const dialog = page.getByRole('dialog', { name: 'Søg efter film', exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Filmtitel', { exact: true }).fill('Wicked');
+  await dialog.getByRole('button', { name: 'Søg', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Vælg den rigtige film', exact: true })
+    .getByRole('button', { name: 'The Wicked · 2013', exact: true })
+    .click();
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
+  await page.getByRole('button', { name: 'Gem film', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'The Wicked', exact: true })).toBeVisible();
+  const saved = await records(page);
+  expect(saved.movies[0]).toMatchObject({
+    title: 'The Wicked',
+    barcode: '7393834487707',
+    notes: 'Bevar efter filmvalg',
+    location: 'Kasse 3',
+  });
+  expect(saved.barcodeMap).toEqual([
+    { id: '7393834487707', movieId: saved.movies[0].id, title: 'The Wicked', year: '2013' },
+  ]);
+  const callsBeforeRescan = requests.length;
+  await scanUnknownBarcode(page);
+  await expect(page.getByRole('status')).toContainText('lokale stregkodekobling');
+  await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('The Wicked');
+  await expect(page.getByLabel('Stregkode', { exact: true })).toHaveValue('7393834487707');
+  expect(requests).toHaveLength(callsBeforeRescan);
+  expect(requests.filter(({ path }) => path === '/lookup-barcode')).toHaveLength(1);
+  expect(requests.filter(({ path }) => path === '/search-movie')).toHaveLength(1);
+  expect(requests.some(({ path }) => path === '/identify-cover')).toBe(false);
 });
 
 // Uploading an own photo must save real JPEG bytes locally even without an API session.
